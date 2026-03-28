@@ -251,6 +251,48 @@ function buildStatusPanelCard({
       },
     ],
   });
+  elements.push({
+    tag: "markdown",
+    content: "**快捷操作**",
+    text_size: "notation",
+  });
+  elements.push(buildQuickActionRow([
+    {
+      text: "项目",
+      value: buildPanelActionValue("open_workspaces"),
+    },
+    {
+      text: "线程",
+      value: buildPanelActionValue("open_threads"),
+    },
+    {
+      text: "消息",
+      value: buildPanelActionValue("show_messages"),
+    },
+    {
+      text: "刷新",
+      value: buildPanelActionValue("status"),
+    },
+  ]));
+  elements.push(buildQuickActionRow([
+    {
+      text: "Git 状态",
+      value: buildPanelActionValue("git_status"),
+    },
+    {
+      text: "Git 拉取",
+      value: buildPanelActionValue("git_pull"),
+    },
+    {
+      text: "Git 推送",
+      value: buildPanelActionValue("git_push"),
+      type: "primary",
+    },
+    {
+      text: "帮助",
+      value: buildPanelActionValue("help"),
+    },
+  ]));
   elements.push({ tag: "hr" });
 
   if (threadRows.length) {
@@ -479,6 +521,11 @@ function buildHelpCardText() {
     [
       "**直接对话**",
       "绑定项目后，直接发普通消息即可继续当前线程。",
+    ],
+    [
+      "**打开控制面板**",
+      "`/codex panel`",
+      "在群聊里打开常用操作面板，可点按钮执行项目、线程、Git 等操作。",
     ],
     [
       "**绑定项目**",
@@ -850,6 +897,20 @@ function buildFooterButtonColumn({ text, value, type = "" }) {
     tag: "column",
     width: "auto",
     elements: [buildButtonElement({ text, type, value })],
+  };
+}
+
+function buildQuickActionRow(actions) {
+  const normalizedActions = Array.isArray(actions) ? actions.filter((action) => action && action.text) : [];
+  return {
+    tag: "column_set",
+    flex_mode: "stretch",
+    columns: normalizedActions.map((action) => ({
+      tag: "column",
+      width: "weighted",
+      weight: 1,
+      elements: [buildButtonElement(action)],
+    })),
   };
 }
 

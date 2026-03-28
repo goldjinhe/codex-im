@@ -111,6 +111,10 @@ async function handleWhereCommand(runtime, normalized) {
   await showStatusPanel(runtime, normalized);
 }
 
+async function handlePanelCommand(runtime, normalized) {
+  await showStatusPanel(runtime, normalized);
+}
+
 async function showStatusPanel(runtime, normalized, { replyToMessageId, noticeText = "" } = {}) {
   const workspaceContext = await resolveWorkspaceContext(runtime, normalized, { replyToMessageId });
   if (!workspaceContext) {
@@ -601,6 +605,7 @@ module.exports = {
   handleHelpCommand,
   handleMessageCommand,
   handleModelCommand,
+  handlePanelCommand,
   handleRemoveCommand,
   handleSendCommand,
   handleUnknownCommand,

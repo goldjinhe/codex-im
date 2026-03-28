@@ -2,6 +2,9 @@ const PANEL_ACTION_CONFIG = Object.freeze({
   open_threads: Object.freeze({
     feedback: "正在打开线程列表...",
   }),
+  open_workspaces: Object.freeze({
+    feedback: "正在打开项目列表...",
+  }),
   show_archived_threads: Object.freeze({
     feedback: "正在打开已归档线程...",
   }),
@@ -16,6 +19,18 @@ const PANEL_ACTION_CONFIG = Object.freeze({
   }),
   status: Object.freeze({
     feedback: "正在刷新状态...",
+  }),
+  git_status: Object.freeze({
+    feedback: "正在获取 Git 状态...",
+  }),
+  git_pull: Object.freeze({
+    feedback: "正在执行 Git 拉取...",
+  }),
+  git_push: Object.freeze({
+    feedback: "正在执行 Git 推送...",
+  }),
+  help: Object.freeze({
+    feedback: "正在打开帮助...",
   }),
   set_model: Object.freeze({
     command: "model",

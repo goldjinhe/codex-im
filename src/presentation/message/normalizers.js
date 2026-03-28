@@ -295,6 +295,7 @@ function parseCommand(text) {
     archive: ["archive"],
     archived: ["archived"],
     stop: ["stop"],
+    panel: ["panel"],
     where: ["where"],
     inspect_message: ["message"],
     help: ["help"],

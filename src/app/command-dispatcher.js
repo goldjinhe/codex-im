@@ -9,6 +9,7 @@ const TEXT_COMMAND_HANDLER_METHODS = {
   archive: "handleArchiveCommand",
   archived: "handleArchivedThreadsCommand",
   stop: "handleStopCommand",
+  panel: "handlePanelCommand",
   bind: "handleBindCommand",
   where: "handleWhereCommand",
   inspect_message: "handleMessageCommand",
@@ -38,6 +39,12 @@ const PANEL_CARD_ACTIONS = {
     feedback: PANEL_ACTION_CONFIG.open_threads.feedback,
     run: (runtime, normalized) => runtime.showThreadPicker(normalized, { replyToMessageId: normalized.messageId }),
   },
+  open_workspaces: {
+    feedback: PANEL_ACTION_CONFIG.open_workspaces.feedback,
+    run: (runtime, normalized) => runtime.handleWorkspacesCommand(normalized, {
+      replyToMessageId: normalized.messageId,
+    }),
+  },
   show_archived_threads: {
     feedback: PANEL_ACTION_CONFIG.show_archived_threads.feedback,
     run: (runtime, normalized) => runtime.showArchivedThreadPicker(
@@ -60,6 +67,22 @@ const PANEL_CARD_ACTIONS = {
   status: {
     feedback: PANEL_ACTION_CONFIG.status.feedback,
     run: (runtime, normalized) => runtime.showStatusPanel(normalized, { replyToMessageId: normalized.messageId }),
+  },
+  git_status: {
+    feedback: PANEL_ACTION_CONFIG.git_status.feedback,
+    run: (runtime, normalized) => runTextCommandFromCard(runtime, normalized, "git", "status"),
+  },
+  git_pull: {
+    feedback: PANEL_ACTION_CONFIG.git_pull.feedback,
+    run: (runtime, normalized) => runTextCommandFromCard(runtime, normalized, "git", "pull"),
+  },
+  git_push: {
+    feedback: PANEL_ACTION_CONFIG.git_push.feedback,
+    run: (runtime, normalized) => runTextCommandFromCard(runtime, normalized, "git", "push"),
+  },
+  help: {
+    feedback: PANEL_ACTION_CONFIG.help.feedback,
+    run: (runtime, normalized) => runTextCommandFromCard(runtime, normalized, "help"),
   },
   set_model: buildPanelSelectAction(PANEL_ACTION_CONFIG.set_model),
   set_effort: buildPanelSelectAction(PANEL_ACTION_CONFIG.set_effort),
@@ -189,23 +212,14 @@ function executeMappedCardAction(runtime, normalized, action, actionMap) {
   );
 }
 
-async function runCodexCommandFromCard(runtime, normalized, command, value) {
+async function runTextCommandFromCard(runtime, normalized, command, value = "") {
   const normalizedValue = String(value || "").trim();
-  if (!normalizedValue) {
-    return;
-  }
   const synthetic = {
     ...normalized,
-    text: `/codex ${command} ${normalizedValue}`,
+    text: normalizedValue ? `/codex ${command} ${normalizedValue}` : `/codex ${command}`,
     command,
   };
-  if (command === "model") {
-    await runtime.handleModelCommand(synthetic);
-    return;
-  }
-  if (command === "effort") {
-    await runtime.handleEffortCommand(synthetic);
-  }
+  await runtime.dispatchTextCommand(synthetic);
 }
 
 function buildPanelSelectAction({ command, feedback, missingValueText }) {
@@ -222,7 +236,7 @@ function buildPanelSelectAction({ command, feedback, missingValueText }) {
       }
       return null;
     },
-    run: (runtime, normalized, action) => runCodexCommandFromCard(
+    run: (runtime, normalized, action) => runTextCommandFromCard(
       runtime,
       normalized,
       command,

@@ -17,6 +17,7 @@ Codex 操作都留在 本地，飞书只负责消息交互。
 - 先加表情、后输出正文
 - 回复到触发它的原消息
 - `/codex bind` 绑定项目
+- `/codex panel` 打开控制面板
 - `/codex where` 查看当前项目/线程
 - `/codex workspace` 查看当前会话已记录项目和线程
 - `/codex remove /绝对路径` 移除会话绑定项目
@@ -110,6 +111,7 @@ npm run feishu-bot
 常用命令：
 
 - `/codex bind /绝对路径`
+- `/codex panel`
 - `/codex where`
 - `/codex workspace`
 - `/codex remove /绝对路径`

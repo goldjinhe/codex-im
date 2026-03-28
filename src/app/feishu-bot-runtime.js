@@ -309,6 +309,7 @@ function attachRuntimeForwarders() {
     handleArchiveCommand: threadRuntime.handleArchiveCommand,
     handleArchivedThreadsCommand: threadRuntime.handleArchivedThreadsCommand,
     handleBindCommand: workspaceRuntime.handleBindCommand,
+    handlePanelCommand: workspaceRuntime.handlePanelCommand,
     handleWhereCommand: workspaceRuntime.handleWhereCommand,
     showStatusPanel: workspaceRuntime.showStatusPanel,
     handleMessageCommand: workspaceRuntime.handleMessageCommand,
