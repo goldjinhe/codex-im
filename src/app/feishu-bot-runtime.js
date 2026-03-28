@@ -151,6 +151,11 @@ class FeishuBotRuntime {
           console.error(`[codex-im] failed to process Feishu message: ${error.message}`);
         });
       },
+      "card.action.trigger": async (data) => {
+        appDispatcher.onFeishuCardAction(this, data).catch((error) => {
+          console.error(`[codex-im] failed to process Feishu card action: ${error.message}`);
+        });
+      },
     });
 
     this.wsClient.start({ eventDispatcher });
