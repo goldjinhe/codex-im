@@ -17,7 +17,7 @@ async function handleStopCommand(runtime, normalized) {
   }
 
   try {
-    await runtime.codex.sendRequest("turn/cancel", {
+    await runtime.codex.sendRequest("turn/interrupt", {
       threadId,
       turnId,
     });
