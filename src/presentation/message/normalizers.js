@@ -34,15 +34,6 @@ function extractCardAction(data) {
     return null;
   }
 
-  if (value.kind === "approval") {
-    return {
-      kind: value.kind,
-      decision: value.decision,
-      scope: value.scope || "once",
-      requestId: value.requestId,
-      threadId: value.threadId,
-    };
-  }
   if (value.kind === "panel") {
     const selectedValue = extractCardSelectedValue(action, value);
     return {

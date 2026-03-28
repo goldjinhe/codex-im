@@ -89,11 +89,6 @@ async function handleCardAction(runtime, data) {
     return buildCardResponse({});
   }
 
-  if (action.kind === "approval") {
-    runCardActionTask(runtime, runtime.handleApprovalCardActionAsync(action, data));
-    return buildCardResponse({});
-  }
-
   const normalized = messageNormalizers.normalizeCardActionContext(data, runtime.config);
   if (!normalized) {
     runCardActionTask(runtime, sendCardActionFeedback(runtime, data, "无法解析当前卡片上下文。", "error"));

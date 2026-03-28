@@ -19,6 +19,11 @@ function readConfig() {
     feishu: {
       appId: process.env.FEISHU_APP_ID || "",
       appSecret: process.env.FEISHU_APP_SECRET || "",
+      verificationToken: readTextEnv("FEISHU_VERIFICATION_TOKEN"),
+      encryptKey: readTextEnv("FEISHU_ENCRYPT_KEY"),
+      cardCallbackHost: readTextEnv("CODEX_IM_FEISHU_CARD_CALLBACK_HOST") || "127.0.0.1",
+      cardCallbackPort: readPortEnv("CODEX_IM_FEISHU_CARD_CALLBACK_PORT", 3333),
+      cardCallbackPath: readHttpPathEnv("CODEX_IM_FEISHU_CARD_CALLBACK_PATH", "/webhook/card"),
     },
     defaultWorkspaceId: process.env.CODEX_IM_DEFAULT_WORKSPACE_ID || "default",
     feishuStreamingOutput: readBooleanEnv("CODEX_IM_FEISHU_STREAMING_OUTPUT", true),
@@ -58,6 +63,27 @@ function readTextEnv(name) {
 function readAccessModeEnv(name) {
   const value = readTextEnv(name).toLowerCase();
   return ALLOWED_ACCESS_MODES.has(value) ? value : "";
+}
+
+function readPortEnv(name, defaultValue) {
+  const rawValue = readTextEnv(name);
+  if (!rawValue) {
+    return defaultValue;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) {
+    return defaultValue;
+  }
+  return parsed;
+}
+
+function readHttpPathEnv(name, defaultValue) {
+  const rawValue = readTextEnv(name);
+  if (!rawValue) {
+    return defaultValue;
+  }
+  return rawValue.startsWith("/") ? rawValue : `/${rawValue}`;
 }
 
 module.exports = { readConfig };

@@ -30,7 +30,7 @@ Codex 操作都留在 本地，飞书只负责消息交互。
 - `/codex stop` 停止当前运行
 - `/codex model` / `/codex model update` / `/codex model <modelId>` 查看可用模型、刷新可用模型以及推理强度、设置模型
 - `/codex effort` / `/codex effort <low|medium|high|xhigh>` 设置推理强度
-- `/codex approve` / `/codex reject` 审批卡片
+- `/codex approve` / `/codex approve workspace` / `/codex reject` 文本审批
 
 ## 安装
 
@@ -90,6 +90,11 @@ codex-im feishu-bot
 - `CODEX_IM_FEISHU_STREAMING_OUTPUT`（默认 `true`，设为 `false` 则等 Codex 完成后一次性输出）
 - `CODEX_IM_WORKSPACE_ALLOWLIST`允许绑定的项目白名单
 - `CODEX_IM_CODEX_ENDPOINT` 用来指定 Codex 的远程 WebSocket RPC 地址，默认是启动本地服务
+- `CODEX_IM_FEISHU_CARD_CALLBACK_HOST` 卡片回调 webhook 监听地址，默认 `127.0.0.1`
+- `CODEX_IM_FEISHU_CARD_CALLBACK_PORT` 卡片回调 webhook 监听端口，默认 `3333`
+- `CODEX_IM_FEISHU_CARD_CALLBACK_PATH` 卡片回调 webhook 路径，默认 `/webhook/card`
+- `FEISHU_VERIFICATION_TOKEN` 开启回调安全校验时使用
+- `FEISHU_ENCRYPT_KEY` 开启回调加密时使用
 - `CODEX_IM_SESSIONS_FILE` session文件路径
 
 
@@ -119,7 +124,7 @@ npm run feishu-bot
 - `/codex model update`
 - `/codex effort`
 - `/codex approve`
-- `/codex approve session`
+- `/codex approve workspace`
 - `/codex reject`
 - `/codex help`
 
@@ -137,7 +142,8 @@ npm run feishu-bot
 - 用户可直接发送文本、图片，或在一条富文本消息里同时发送文本和图片
 - Codex 返回内容后，飞书中以卡片形式持续更新
 - 命令回执和普通对话都会优先回复到触发它的原消息
-- 审批请求会显示为交互卡片
+- 审批请求会显示为提醒卡片，审批通过文本命令完成
+- 普通消息通过飞书长连接接收，卡片点击通过独立 webhook 回调处理
 
 ## 开发
 
@@ -161,6 +167,15 @@ npm run feishu-bot
 | 接收消息 | `im.message.receive_v1` |
 
 3. 回调配置
+
+`codex-im` 会在本地启动一个卡片回调 webhook，默认监听：
+
+```text
+http://127.0.0.1:3333/webhook/card
+```
+
+飞书后台里的卡片回传地址需要指向这个 webhook 对外可访问的地址。
+本地开发如果没有公网入口，需要自行通过反向代理、隧道或端口映射暴露出去。
 
 | 名称 | 标识 |
 | --- | --- |

@@ -220,28 +220,6 @@ function extractCardChatId(data) {
   return normalizeIdentifier(data?.context?.open_chat_id);
 }
 
-function patchWsClientForCardCallbacks(wsClient) {
-  if (!wsClient || typeof wsClient.handleEventData !== "function") {
-    return;
-  }
-
-  const originalHandleEventData = wsClient.handleEventData.bind(wsClient);
-  wsClient.handleEventData = (data) => {
-    const headers = Array.isArray(data?.headers) ? data.headers : [];
-    const messageType = headers.find((header) => header?.key === "type")?.value;
-    if (messageType === "card") {
-      const patchedData = {
-        ...data,
-        headers: headers.map((header) => (
-          header?.key === "type" ? { ...header, value: "event" } : header
-        )),
-      };
-      return originalHandleEventData(patchedData);
-    }
-    return originalHandleEventData(data);
-  };
-}
-
 function normalizeIdentifier(value) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
 }
@@ -271,5 +249,4 @@ function readStreamToBuffer(readableStream) {
 module.exports = {
   FeishuClientAdapter,
   extractCardChatId,
-  patchWsClientForCardCallbacks,
 };

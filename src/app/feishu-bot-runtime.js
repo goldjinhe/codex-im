@@ -1,3 +1,4 @@
+const http = require("http");
 const { readConfig } = require("../infra/config/config");
 const { SessionStore } = require("../infra/storage/session-store");
 const { CodexRpcClient } = require("../infra/codex/rpc-client");
@@ -38,7 +39,6 @@ const {
 } = require("../presentation/card/card-service");
 const {
   FeishuClientAdapter,
-  patchWsClientForCardCallbacks,
 } = require("../infra/feishu/client-adapter");
 const runtimeCommands = require("./command-dispatcher");
 const approvalRuntime = require("../domain/approval/approval-service");
@@ -64,6 +64,7 @@ class FeishuBotRuntime {
     this.client = null;
     this.wsClient = null;
     this.feishuAdapter = null;
+    this.cardCallbackServer = null;
     this.pendingChatContextByThreadId = new Map();
     this.pendingChatContextByBindingKey = new Map();
     this.activeTurnIdByThreadId = new Map();
@@ -85,6 +86,7 @@ class FeishuBotRuntime {
   async start() {
     this.validateConfig();
     this.initializeFeishuSdk();
+    await this.startCardCallbackServer();
     await this.codex.connect();
     await this.codex.initialize();
     await this.refreshAvailableModelCatalogAtStartup();
@@ -139,7 +141,6 @@ class FeishuBotRuntime {
       },
     });
     this.feishuAdapter = new FeishuClientAdapter(this.client);
-    patchWsClientForCardCallbacks(this.wsClient);
   }
 
   startLongConnection() {
@@ -149,11 +150,55 @@ class FeishuBotRuntime {
           console.error(`[codex-im] failed to process Feishu message: ${error.message}`);
         });
       },
-      "card.action.trigger": async (data) => appDispatcher.onFeishuCardAction(this, data),
     });
 
     this.wsClient.start({ eventDispatcher });
     console.log("[codex-im] Feishu long connection started");
+  }
+
+  async startCardCallbackServer() {
+    const handlerOptions = {
+      loggerLevel: this.lark.LoggerLevel.info,
+    };
+    if (this.config.feishu.encryptKey) {
+      handlerOptions.encryptKey = this.config.feishu.encryptKey;
+    }
+    if (this.config.feishu.verificationToken) {
+      handlerOptions.verificationToken = this.config.feishu.verificationToken;
+    }
+
+    const cardHandler = new this.lark.CardActionHandler(
+      handlerOptions,
+      async (data) => appDispatcher.onFeishuCardAction(this, data)
+    );
+    const server = http.createServer();
+    server.on("error", (error) => {
+      console.error(`[codex-im] Feishu card callback server error: ${error.message}`);
+    });
+    server.on("request", this.lark.adaptDefault(this.config.feishu.cardCallbackPath, cardHandler));
+
+    await new Promise((resolve, reject) => {
+      const onError = (error) => {
+        server.off("listening", onListening);
+        reject(error);
+      };
+      const onListening = () => {
+        server.off("error", onError);
+        resolve();
+      };
+
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(
+        this.config.feishu.cardCallbackPort,
+        this.config.feishu.cardCallbackHost
+      );
+    });
+
+    this.cardCallbackServer = server;
+    console.log(
+      `[codex-im] Feishu card callback server listening on http://${this.config.feishu.cardCallbackHost}:${this.config.feishu.cardCallbackPort}${this.config.feishu.cardCallbackPath}`
+    );
   }
 
   async refreshAvailableModelCatalogAtStartup() {
@@ -298,7 +343,6 @@ function attachRuntimeForwarders() {
     handleWorkspaceCardAction: runtimeCommands.handleWorkspaceCardAction,
     queueCardActionWithFeedback,
     runCardActionTask,
-    handleApprovalCardActionAsync: approvalRuntime.handleApprovalCardActionAsync,
     sendCardActionFeedbackByContext,
     sendCardActionFeedback,
     switchWorkspaceByPath: workspaceRuntime.switchWorkspaceByPath,

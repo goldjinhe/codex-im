@@ -1,5 +1,4 @@
 const codexMessageUtils = require("../../infra/codex/message-utils");
-const { extractCardChatId } = require("../../infra/feishu/client-adapter");
 const { formatFailureText } = require("../../shared/error-text");
 
 function buildApprovalRequestKey(threadId, requestId) {
@@ -161,45 +160,7 @@ async function markApprovalResolved(runtime, threadId, resolution) {
   }
 }
 
-async function handleApprovalCardActionAsync(runtime, action, data) {
-  const approval = runtime.pendingApprovalByThreadId.get(action.threadId);
-  if (!approval || String(approval.requestId) !== String(action.requestId)) {
-    await runtime.sendCardActionFeedback(data, "该授权请求已失效。", "error");
-    return;
-  }
-
-  const chatId = approval.chatId || extractCardChatId(data);
-  if (chatId) {
-    await runtime.sendInfoCardMessage({
-      chatId,
-      replyToMessageId: approval.cardMessageId || approval.replyToMessageId || "",
-      text: "正在处理授权，等待 Codex 继续执行...",
-      kind: "progress",
-    });
-  }
-
-  try {
-    const outcome = await applyApprovalDecision(runtime, {
-      threadId: action.threadId,
-      approval,
-      command: action.decision,
-      workspaceRoot: runtime.resolveWorkspaceRootForThread(action.threadId),
-      scope: action.scope === "workspace" ? "workspace" : "once",
-    });
-    if (outcome.error) {
-      throw outcome.error;
-    }
-    if (outcome.ignoredAsDuplicate) {
-      await runtime.sendCardActionFeedback(data, "该授权请求正在处理中，请稍后。", "info");
-      return;
-    }
-  } catch (error) {
-    await runtime.sendCardActionFeedback(data, formatFailureText("处理失败", error), "error");
-  }
-}
-
 module.exports = {
   applyApprovalDecision,
   handleApprovalCommand,
-  handleApprovalCardActionAsync,
 };

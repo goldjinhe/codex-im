@@ -6,6 +6,14 @@ const { normalizeText, resolveEffectiveModelForEffort } = require("../../shared/
 function buildApprovalCard(approval) {
   const requestType = approval?.method && approval.method.includes("command") ? "命令执行" : "敏感操作";
   const commandLine = formatApprovalCommandInline(approval?.command);
+  const commandHelpLines = [
+    "请直接发送以下文本命令处理：",
+    "`/codex approve`：允许本次请求",
+    isWorkspaceApprovalAvailable(approval)
+      ? "`/codex approve workspace`：允许当前项目后续同类命令"
+      : "",
+    "`/codex reject`：拒绝本次请求",
+  ].filter(Boolean);
   return {
     schema: "2.0",
     config: {
@@ -26,77 +34,18 @@ function buildApprovalCard(approval) {
             `请求类型：${requestType}`,
             approval.reason ? `原因：${escapeCardMarkdown(approval.reason)}` : "",
             commandLine ? `命令：\`${commandLine}\`` : "",
-            "请选择处理方式：",
+            "",
+            ...commandHelpLines,
           ].filter(Boolean).join("\n"),
           text_size: "normal",
         },
-        {
-          tag: "column_set",
-          flex_mode: "none",
-          columns: [
-            {
-              tag: "column",
-              width: "weighted",
-              weight: 1,
-              elements: [
-                {
-                  tag: "button",
-                  text: { tag: "plain_text", content: "本次允许" },
-                  type: "primary",
-                  value: {
-                    kind: "approval",
-                    decision: "approve",
-                    scope: "once",
-                    requestId: approval.requestId,
-                    threadId: approval.threadId,
-                  },
-                },
-              ],
-            },
-            {
-              tag: "column",
-              width: "weighted",
-              weight: 1,
-              elements: [
-                {
-                  tag: "button",
-                  text: { tag: "plain_text", content: "自动允许" },
-                  value: {
-                    kind: "approval",
-                    decision: "approve",
-                    scope: "workspace",
-                    requestId: approval.requestId,
-                    threadId: approval.threadId,
-                  },
-                },
-              ],
-            },
-            {
-              tag: "column",
-              width: "weighted",
-              weight: 1,
-              elements: [
-                {
-                  tag: "button",
-                  text: { tag: "plain_text", content: "拒绝" },
-                  type: "danger",
-                  value: {
-                    kind: "approval",
-                    decision: "reject",
-                    scope: "once",
-                    requestId: approval.requestId,
-                    threadId: approval.threadId,
-                  },
-                },
-              ],
-            },
-          ],
-        },
-        {
-          tag: "markdown",
-          content: "`自动允许` 对当前项目生效，相同命令自动允许，重启后仍保留。",
-          text_size: "notation",
-        },
+        ...(isWorkspaceApprovalAvailable(approval)
+          ? [{
+            tag: "markdown",
+            content: "`/codex approve workspace` 对当前项目生效，相同命令会自动允许，重启后仍保留。",
+            text_size: "notation",
+          }]
+          : []),
       ],
     },
   };
@@ -849,6 +798,10 @@ function formatApprovalCommandInline(command) {
     return "";
   }
   return normalized.replace(/`/g, "\\`");
+}
+
+function isWorkspaceApprovalAvailable(approval) {
+  return !!(approval?.method && String(approval.method).includes("command"));
 }
 
 function formatThreadLabel(thread) {
