@@ -2,6 +2,7 @@ const { readConfig } = require("../infra/config/config");
 const { SessionStore } = require("../infra/storage/session-store");
 const { CodexRpcClient } = require("../infra/codex/rpc-client");
 const {
+  buildArchivedThreadPickerCard,
   buildCardResponse,
   buildCardToast,
   buildEffortInfoText,
@@ -216,6 +217,7 @@ function attachRuntimeForwarders() {
   const proto = FeishuBotRuntime.prototype;
 
   const plainForwarders = {
+    buildArchivedThreadPickerCard,
     buildCardResponse,
     buildCardToast,
     buildEffortInfoText,
@@ -257,6 +259,8 @@ function attachRuntimeForwarders() {
     shouldAutoApproveRequest: approvalPolicyRuntime.shouldAutoApproveRequest,
     tryAutoApproveRequest: approvalPolicyRuntime.tryAutoApproveRequest,
     applyApprovalDecision: approvalRuntime.applyApprovalDecision,
+    handleArchiveCommand: threadRuntime.handleArchiveCommand,
+    handleArchivedThreadsCommand: threadRuntime.handleArchivedThreadsCommand,
     handleBindCommand: workspaceRuntime.handleBindCommand,
     handleWhereCommand: workspaceRuntime.handleWhereCommand,
     showStatusPanel: workspaceRuntime.showStatusPanel,
@@ -265,7 +269,10 @@ function attachRuntimeForwarders() {
     handleUnknownCommand: workspaceRuntime.handleUnknownCommand,
     handleWorkspacesCommand: workspaceRuntime.handleWorkspacesCommand,
     showThreadPicker: workspaceRuntime.showThreadPicker,
+    showArchivedThreadPicker: threadRuntime.showArchivedThreadPicker,
+    archiveThreadById: threadRuntime.archiveThreadById,
     handleNewCommand: threadRuntime.handleNewCommand,
+    handleRestoreCommand: threadRuntime.handleRestoreCommand,
     handleSwitchCommand: threadRuntime.handleSwitchCommand,
     handleRemoveCommand: workspaceRuntime.handleRemoveCommand,
     handleSendCommand: workspaceRuntime.handleSendCommand,
@@ -273,6 +280,7 @@ function attachRuntimeForwarders() {
     handleEffortCommand: workspaceRuntime.handleEffortCommand,
     refreshWorkspaceThreads: threadRuntime.refreshWorkspaceThreads,
     describeWorkspaceStatus: threadRuntime.describeWorkspaceStatus,
+    restoreThreadById: threadRuntime.restoreThreadById,
     switchThreadById: threadRuntime.switchThreadById,
     handleStopCommand: eventsRuntime.handleStopCommand,
     handleApprovalCommand: approvalRuntime.handleApprovalCommand,

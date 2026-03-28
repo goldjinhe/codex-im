@@ -157,7 +157,7 @@ function buildInfoCard(text, { kind = "info" } = {}) {
   };
 }
 
-function buildThreadRow({ thread, isCurrent, currentThreadStatusText = "" }) {
+function buildThreadRow({ thread, labelText, statusText = "", actions = [], extraLines = [] }) {
   return {
     tag: "column_set",
     flex_mode: "none",
@@ -171,9 +171,10 @@ function buildThreadRow({ thread, isCurrent, currentThreadStatusText = "" }) {
           {
             tag: "markdown",
             content: [
-              `${isCurrent ? "🟢 当前" : "⚪ 历史"} · **${formatThreadLabel(thread)}**${isCurrent && currentThreadStatusText ? ` · ${currentThreadStatusText}` : ""}`,
+              `${labelText || "⚪ 历史"} · **${formatThreadLabel(thread)}**${statusText ? ` · ${statusText}` : ""}`,
               formatThreadIdLine(thread),
               summarizeThreadPreview(thread),
+              ...extraLines,
             ].filter(Boolean).join("\n"),
             text_size: "notation",
           },
@@ -183,47 +184,7 @@ function buildThreadRow({ thread, isCurrent, currentThreadStatusText = "" }) {
         tag: "column",
         width: "auto",
         vertical_align: "center",
-        elements: isCurrent
-          ? [
-            {
-              tag: "column_set",
-              flex_mode: "none",
-              columns: [
-                {
-                  tag: "column",
-                  width: "auto",
-                  elements: [
-                    {
-                      tag: "button",
-                      text: { tag: "plain_text", content: "最近消息" },
-                      type: "primary",
-                      value: buildThreadActionValue("messages", thread.id),
-                    },
-                  ],
-                },
-                {
-                  tag: "column",
-                  width: "auto",
-                  elements: [
-                    {
-                      tag: "button",
-                      text: { tag: "plain_text", content: "当前" },
-                      type: "default",
-                      disabled: true,
-                    },
-                  ],
-                },
-              ],
-            },
-          ]
-          : [
-            {
-              tag: "button",
-              text: { tag: "plain_text", content: "切换" },
-              type: "primary",
-              value: buildThreadActionValue("switch", thread.id),
-            },
-          ],
+        elements: buildThreadActionElements(actions),
       },
     ],
   };
@@ -238,6 +199,7 @@ function buildStatusPanelCard({
   currentThread,
   recentThreads,
   totalThreadCount,
+  archivedThreadCount = 0,
   status,
   noticeText = "",
 }) {
@@ -252,13 +214,36 @@ function buildStatusPanelCard({
   const current = threadId ? (currentThread || { id: threadId }) : null;
   if (current) {
     threadRows.push({
-      isCurrent: true,
+      actions: [
+        {
+          text: "最近消息",
+          type: "primary",
+          value: buildThreadActionValue("messages", current.id),
+        },
+        {
+          text: "归档",
+          value: buildThreadActionValue("archive", current.id),
+        },
+      ],
+      labelText: "🟢 当前",
+      statusText: currentThreadStatusText,
       thread: current,
     });
   }
   for (const thread of (recentThreads || [])) {
     threadRows.push({
-      isCurrent: false,
+      actions: [
+        {
+          text: "切换",
+          type: "primary",
+          value: buildThreadActionValue("switch", thread.id),
+        },
+        {
+          text: "归档",
+          value: buildThreadActionValue("archive", thread.id),
+        },
+      ],
+      labelText: "⚪ 历史",
       thread,
     });
   }
@@ -330,15 +315,18 @@ function buildStatusPanelCard({
         elements.push({ tag: "hr" });
       }
       elements.push(buildThreadRow({
+        actions: row.actions,
+        labelText: row.labelText,
+        statusText: row.statusText,
         thread: row.thread,
-        isCurrent: row.isCurrent,
-        currentThreadStatusText,
       }));
     });
   } else {
     elements.push({
       tag: "markdown",
-      content: "**线程列表**\n暂无历史线程",
+      content: archivedThreadCount
+        ? "**线程列表**\n暂无未归档线程，可查看已归档线程。"
+        : "**线程列表**\n暂无历史线程",
       text_size: "notation",
     });
   }
@@ -348,6 +336,12 @@ function buildStatusPanelCard({
     footerColumns.push(buildFooterButtonColumn({
       text: "全部线程",
       value: buildPanelActionValue("open_threads"),
+    }));
+  }
+  if (Number(archivedThreadCount || 0) > 0) {
+    footerColumns.push(buildFooterButtonColumn({
+      text: `已归档 ${archivedThreadCount}`,
+      value: buildPanelActionValue("show_archived_threads"),
     }));
   }
   footerColumns.push(buildFooterButtonColumn({
@@ -384,7 +378,7 @@ function buildStatusPanelCard({
   };
 }
 
-function buildThreadPickerCard({ workspaceRoot, threads, currentThreadId }) {
+function buildThreadPickerCard({ workspaceRoot, threads, currentThreadId, archivedThreadCount = 0 }) {
   const elements = [
     {
       tag: "markdown",
@@ -404,18 +398,118 @@ function buildThreadPickerCard({ workspaceRoot, threads, currentThreadId }) {
     }
     const isCurrent = thread.id === currentThreadId;
     elements.push(buildThreadRow({
+      actions: isCurrent
+        ? [
+          {
+            text: "最近消息",
+            type: "primary",
+            value: buildThreadActionValue("messages", thread.id),
+          },
+          {
+            text: "归档",
+            value: buildThreadActionValue("archive", thread.id),
+          },
+        ]
+        : [
+          {
+            text: "切换",
+            type: "primary",
+            value: buildThreadActionValue("switch", thread.id),
+          },
+          {
+            text: "归档",
+            value: buildThreadActionValue("archive", thread.id),
+          },
+        ],
+      labelText: isCurrent ? "🟢 当前" : "⚪ 历史",
+      statusText: "",
       thread,
-      isCurrent,
-      currentThreadStatusText: "",
+    }));
+  });
+
+  const footerColumns = [];
+  if (Number(archivedThreadCount || 0) > 0) {
+    footerColumns.push(buildFooterButtonColumn({
+      text: `已归档 ${archivedThreadCount}`,
+      value: buildPanelActionValue("show_archived_threads"),
+    }));
+  }
+  footerColumns.push(buildFooterButtonColumn({
+    text: "新建线程",
+    value: buildPanelActionValue("new_thread"),
+  }));
+  elements.push(
+    { tag: "hr" },
+    {
+      tag: "column_set",
+      flex_mode: "none",
+      columns: footerColumns,
+    }
+  );
+
+  return {
+    schema: "2.0",
+    config: {
+      wide_screen_mode: true,
+      update_multi: true,
+    },
+    body: {
+      elements,
+    },
+  };
+}
+
+function buildArchivedThreadPickerCard({ workspaceRoot, threads, noticeText = "" }) {
+  const elements = [];
+  if (typeof noticeText === "string" && noticeText.trim()) {
+    elements.push({
+      tag: "markdown",
+      content: `✅ ${escapeCardMarkdown(noticeText.trim())}`,
+      text_size: "notation",
+    });
+  }
+  elements.push(
+    {
+      tag: "markdown",
+      content: `**当前项目**：\`${escapeCardMarkdown(workspaceRoot)}\``,
+    },
+    { tag: "hr" },
+    {
+      tag: "markdown",
+      content: `**已归档线程**（${threads.length}）`,
+      text_size: "notation",
+    },
+  );
+
+  threads.forEach((thread, index) => {
+    if (index > 0) {
+      elements.push({ tag: "hr" });
+    }
+    elements.push(buildThreadRow({
+      actions: [
+        {
+          text: "恢复",
+          type: "primary",
+          value: buildThreadActionValue("restore", thread.id),
+        },
+      ],
+      extraLines: [summarizeArchivedAt(thread)],
+      labelText: "⚫ 已归档",
+      thread,
     }));
   });
 
   elements.push(
     { tag: "hr" },
     {
-      tag: "button",
-      text: { tag: "plain_text", content: "新建线程" },
-      value: buildPanelActionValue("new_thread"),
+      tag: "column_set",
+      flex_mode: "none",
+      columns: [
+        buildFooterButtonColumn({
+          text: "返回状态",
+          value: buildPanelActionValue("status"),
+        }),
+      ],
     }
   );
 
@@ -471,6 +565,21 @@ function buildHelpCardText() {
       "**切换到指定线程**",
       "`/codex switch <threadId>`",
       "按线程 ID 切换到指定线程。",
+    ],
+    [
+      "**归档当前线程**",
+      "`/codex archive`",
+      "把当前线程移到已归档列表，默认线程列表不再显示。",
+    ],
+    [
+      "**查看已归档线程**",
+      "`/codex archived`",
+      "查看当前项目下已归档线程，并可恢复。",
+    ],
+    [
+      "**恢复已归档线程**",
+      "`/codex restore <threadId>`",
+      "把指定线程从已归档列表恢复到正常线程列表。",
     ],
     [
       "**新建线程**",
@@ -779,18 +888,10 @@ function buildPanelActionValue(action) {
 }
 
 function buildFooterButtonColumn({ text, value, type = "" }) {
-  const button = {
-    tag: "button",
-    text: { tag: "plain_text", content: text },
-    value,
-  };
-  if (type) {
-    button.type = type;
-  }
   return {
     tag: "column",
     width: "auto",
-    elements: [button],
+    elements: [buildButtonElement({ text, type, value })],
   };
 }
 
@@ -886,6 +987,55 @@ function buildWorkspaceActionValue(action, workspaceRoot) {
 function summarizeThreadPreview(thread) {
   const updated = formatRelativeTimestamp(thread?.updatedAt);
   return updated ? `更新时间：${updated}` : "更新时间：未知";
+}
+
+function summarizeArchivedAt(thread) {
+  const timestamp = Date.parse(thread?.archivedAt || "");
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "";
+  }
+  const relative = formatRelativeTimestamp(timestamp / 1000);
+  return relative ? `归档时间：${relative}` : "";
+}
+
+function buildThreadActionElements(actions) {
+  const normalizedActions = Array.isArray(actions)
+    ? actions.filter((action) => action && action.text)
+    : [];
+  if (!normalizedActions.length) {
+    return [];
+  }
+  if (normalizedActions.length === 1) {
+    return [buildButtonElement(normalizedActions[0])];
+  }
+  return [
+    {
+      tag: "column_set",
+      flex_mode: "none",
+      columns: normalizedActions.map((action) => ({
+        tag: "column",
+        width: "auto",
+        elements: [buildButtonElement(action)],
+      })),
+    },
+  ];
+}
+
+function buildButtonElement({ text, value, type = "", disabled = false }) {
+  const button = {
+    tag: "button",
+    text: { tag: "plain_text", content: text },
+  };
+  if (value) {
+    button.value = value;
+  }
+  if (type) {
+    button.type = type;
+  }
+  if (disabled) {
+    button.disabled = true;
+  }
+  return button;
 }
 
 function formatRelativeTimestamp(value) {
@@ -1151,6 +1301,7 @@ function suggestModels(models, rawInput, limit = 3) {
 module.exports = {
   buildApprovalCard,
   buildApprovalResolvedCard,
+  buildArchivedThreadPickerCard,
   buildAssistantReplyCard,
   buildCardResponse,
   buildCardToast,

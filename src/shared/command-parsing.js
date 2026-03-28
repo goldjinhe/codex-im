@@ -6,6 +6,10 @@ function extractSwitchThreadId(text) {
   return extractCommandArgument(text, "/codex switch ");
 }
 
+function extractRestoreThreadId(text) {
+  return extractCommandArgument(text, "/codex restore ");
+}
+
 function extractRemoveWorkspacePath(text) {
   return extractCommandArgument(text, "/codex remove ");
 }
@@ -36,6 +40,7 @@ module.exports = {
   extractEffortValue,
   extractModelValue,
   extractRemoveWorkspacePath,
+  extractRestoreThreadId,
   extractSendPath,
   extractSwitchThreadId,
 };

@@ -6,6 +6,8 @@ const {
 } = require("./card-action-config");
 
 const TEXT_COMMAND_HANDLER_METHODS = {
+  archive: "handleArchiveCommand",
+  archived: "handleArchivedThreadsCommand",
   stop: "handleStopCommand",
   bind: "handleBindCommand",
   where: "handleWhereCommand",
@@ -14,6 +16,7 @@ const TEXT_COMMAND_HANDLER_METHODS = {
   unknown_command: "handleUnknownCommand",
   workspace: "handleWorkspacesCommand",
   switch: "handleSwitchCommand",
+  restore: "handleRestoreCommand",
   remove: "handleRemoveCommand",
   send: "handleSendCommand",
   new: "handleNewCommand",
@@ -33,6 +36,13 @@ const PANEL_CARD_ACTIONS = {
   open_threads: {
     feedback: PANEL_ACTION_CONFIG.open_threads.feedback,
     run: (runtime, normalized) => runtime.showThreadPicker(normalized, { replyToMessageId: normalized.messageId }),
+  },
+  show_archived_threads: {
+    feedback: PANEL_ACTION_CONFIG.show_archived_threads.feedback,
+    run: (runtime, normalized) => runtime.showArchivedThreadPicker(
+      normalized,
+      { replyToMessageId: normalized.messageId }
+    ),
   },
   new_thread: {
     feedback: PANEL_ACTION_CONFIG.new_thread.feedback,
@@ -78,6 +88,21 @@ const THREAD_CARD_ACTIONS = {
       return null;
     },
     run: (runtime, normalized) => runtime.handleMessageCommand(normalized),
+  },
+  archive: {
+    feedback: THREAD_ACTION_CONFIG.archive.feedback,
+    run: (runtime, normalized, action) => (
+      runtime.archiveThreadById(normalized, action.threadId, { replyToMessageId: normalized.messageId })
+    ),
+  },
+  restore: {
+    feedback: THREAD_ACTION_CONFIG.restore.feedback,
+    run: (runtime, normalized, action) => (
+      runtime.restoreThreadById(normalized, action.threadId, {
+        replyToMessageId: normalized.messageId,
+        reopenArchivedList: true,
+      })
+    ),
   },
 };
 

@@ -211,6 +211,82 @@ class SessionStore {
     return this.state.approvalCommandAllowlistByWorkspaceRoot[normalizedWorkspaceRoot];
   }
 
+  getArchivedThreadsForWorkspace(bindingKey, workspaceRoot) {
+    const normalizedWorkspaceRoot = normalizeValue(workspaceRoot);
+    if (!normalizedWorkspaceRoot) {
+      return [];
+    }
+
+    const archivedThreadMap = getArchivedThreadMap(this.getBinding(bindingKey), normalizedWorkspaceRoot);
+    return Object.entries(archivedThreadMap)
+      .map(([threadId, raw]) => normalizeArchivedThreadEntry(threadId, raw))
+      .filter((entry) => entry.id);
+  }
+
+  isThreadArchived(bindingKey, workspaceRoot, threadId) {
+    const normalizedWorkspaceRoot = normalizeValue(workspaceRoot);
+    const normalizedThreadId = normalizeValue(threadId);
+    if (!normalizedWorkspaceRoot || !normalizedThreadId) {
+      return false;
+    }
+
+    const archivedThreadMap = getArchivedThreadMap(this.getBinding(bindingKey), normalizedWorkspaceRoot);
+    return Object.prototype.hasOwnProperty.call(archivedThreadMap, normalizedThreadId);
+  }
+
+  archiveThread(bindingKey, workspaceRoot, threadId, metadata = {}) {
+    const normalizedWorkspaceRoot = normalizeValue(workspaceRoot);
+    const normalizedThreadId = normalizeValue(threadId);
+    if (!normalizedWorkspaceRoot || !normalizedThreadId) {
+      return this.getBinding(bindingKey);
+    }
+
+    const current = this.getBinding(bindingKey) || {};
+    const archivedThreadsByWorkspaceRoot = getArchivedThreadsByWorkspaceRootMap(current);
+    archivedThreadsByWorkspaceRoot[normalizedWorkspaceRoot] = {
+      ...getArchivedThreadMap(current, normalizedWorkspaceRoot),
+      [normalizedThreadId]: {
+        title: normalizeValue(metadata.title),
+        updatedAt: normalizeTimestamp(metadata.updatedAt),
+        archivedAt: new Date().toISOString(),
+        cwd: normalizeValue(metadata.cwd),
+        sourceKind: normalizeValue(metadata.sourceKind),
+      },
+    };
+
+    return this.updateBinding(bindingKey, {
+      ...current,
+      archivedThreadsByWorkspaceRoot,
+    });
+  }
+
+  restoreThread(bindingKey, workspaceRoot, threadId) {
+    const normalizedWorkspaceRoot = normalizeValue(workspaceRoot);
+    const normalizedThreadId = normalizeValue(threadId);
+    if (!normalizedWorkspaceRoot || !normalizedThreadId) {
+      return this.getBinding(bindingKey);
+    }
+
+    const current = this.getBinding(bindingKey) || {};
+    const archivedThreadsByWorkspaceRoot = getArchivedThreadsByWorkspaceRootMap(current);
+    const archivedThreadMap = getArchivedThreadMap(current, normalizedWorkspaceRoot);
+    if (!Object.prototype.hasOwnProperty.call(archivedThreadMap, normalizedThreadId)) {
+      return current;
+    }
+
+    delete archivedThreadMap[normalizedThreadId];
+    if (Object.keys(archivedThreadMap).length > 0) {
+      archivedThreadsByWorkspaceRoot[normalizedWorkspaceRoot] = archivedThreadMap;
+    } else {
+      delete archivedThreadsByWorkspaceRoot[normalizedWorkspaceRoot];
+    }
+
+    return this.updateBinding(bindingKey, {
+      ...current,
+      archivedThreadsByWorkspaceRoot,
+    });
+  }
+
   removeWorkspace(bindingKey, workspaceRoot) {
     const normalizedWorkspaceRoot = normalizeValue(workspaceRoot);
     if (!normalizedWorkspaceRoot) {
@@ -220,17 +296,23 @@ class SessionStore {
     const current = this.getBinding(bindingKey) || {};
     const threadIdByWorkspaceRoot = getThreadMap(current);
     const codexParamsByWorkspaceRoot = getCodexParamsMap(current);
+    const archivedThreadsByWorkspaceRoot = getArchivedThreadsByWorkspaceRootMap(current);
     const hasWorkspaceEntry = Object.prototype.hasOwnProperty.call(
       threadIdByWorkspaceRoot,
       normalizedWorkspaceRoot
     );
+    const hasArchivedEntry = Object.prototype.hasOwnProperty.call(
+      archivedThreadsByWorkspaceRoot,
+      normalizedWorkspaceRoot
+    );
     const activeWorkspaceRoot = normalizeValue(current.activeWorkspaceRoot);
-    if (!hasWorkspaceEntry && activeWorkspaceRoot !== normalizedWorkspaceRoot) {
+    if (!hasWorkspaceEntry && !hasArchivedEntry && activeWorkspaceRoot !== normalizedWorkspaceRoot) {
       return current;
     }
 
     delete threadIdByWorkspaceRoot[normalizedWorkspaceRoot];
     delete codexParamsByWorkspaceRoot[normalizedWorkspaceRoot];
+    delete archivedThreadsByWorkspaceRoot[normalizedWorkspaceRoot];
 
     const nextActiveWorkspaceRoot = activeWorkspaceRoot === normalizedWorkspaceRoot
       ? (Object.keys(threadIdByWorkspaceRoot).sort((left, right) => left.localeCompare(right))[0] || "")
@@ -239,6 +321,7 @@ class SessionStore {
     return this.updateBinding(bindingKey, {
       ...current,
       activeWorkspaceRoot: nextActiveWorkspaceRoot,
+      archivedThreadsByWorkspaceRoot,
       codexParamsByWorkspaceRoot,
       threadIdByWorkspaceRoot,
     });
@@ -287,6 +370,38 @@ function getThreadMap(binding) {
 
 function getCodexParamsMap(binding) {
   return { ...(binding?.codexParamsByWorkspaceRoot || {}) };
+}
+
+function getArchivedThreadsByWorkspaceRootMap(binding) {
+  return { ...(binding?.archivedThreadsByWorkspaceRoot || {}) };
+}
+
+function getArchivedThreadMap(binding, workspaceRoot) {
+  const archivedThreadsByWorkspaceRoot = getArchivedThreadsByWorkspaceRootMap(binding);
+  const raw = archivedThreadsByWorkspaceRoot[workspaceRoot];
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+  return { ...raw };
+}
+
+function normalizeArchivedThreadEntry(threadId, raw) {
+  return {
+    id: normalizeValue(threadId),
+    title: normalizeValue(raw?.title),
+    updatedAt: normalizeTimestamp(raw?.updatedAt),
+    archivedAt: normalizeValue(raw?.archivedAt),
+    cwd: normalizeValue(raw?.cwd),
+    sourceKind: normalizeValue(raw?.sourceKind),
+  };
+}
+
+function normalizeTimestamp(value) {
+  const timestamp = Number(value || 0);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return 0;
+  }
+  return timestamp;
 }
 
 function normalizeCommandTokens(tokens) {

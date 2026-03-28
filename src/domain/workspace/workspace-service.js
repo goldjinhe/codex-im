@@ -128,6 +128,7 @@ async function showStatusPanel(runtime, normalized, { replyToMessageId, noticeTe
   const recentThreads = currentThread
     ? threads.filter((thread) => thread.id !== threadId).slice(0, 2)
     : threads.slice(0, 3);
+  const archivedThreadCount = runtime.sessionStore.getArchivedThreadsForWorkspace(bindingKey, workspaceRoot).length;
   const status = runtime.describeWorkspaceStatus(threadId);
   const codexParams = runtime.getCodexParamsForWorkspace(bindingKey, workspaceRoot);
   const availableCatalog = runtime.sessionStore.getAvailableModelCatalog();
@@ -146,6 +147,7 @@ async function showStatusPanel(runtime, normalized, { replyToMessageId, noticeTe
       currentThread,
       recentThreads,
       totalThreadCount: threads.length,
+      archivedThreadCount,
       status,
       noticeText,
     }),
@@ -458,12 +460,15 @@ async function showThreadPicker(runtime, normalized, { replyToMessageId } = {}) 
   }
 
   const threads = await runtime.refreshWorkspaceThreads(bindingKey, workspaceRoot, normalized);
+  const archivedThreadCount = runtime.sessionStore.getArchivedThreadsForWorkspace(bindingKey, workspaceRoot).length;
   const currentThreadId = runtime.resolveThreadIdForBinding(bindingKey, workspaceRoot) || threads[0]?.id || "";
   if (!threads.length) {
     await runtime.sendInfoCardMessage({
       chatId: normalized.chatId,
       replyToMessageId: replyTarget,
-      text: `当前项目：\`${workspaceRoot}\`\n\n还没有可切换的历史线程。`,
+      text: archivedThreadCount
+        ? `当前项目：\`${workspaceRoot}\`\n\n当前没有未归档线程，可发送 \`/codex archived\` 查看已归档线程。`
+        : `当前项目：\`${workspaceRoot}\`\n\n还没有可切换的历史线程。`,
     });
     return;
   }
@@ -475,6 +480,7 @@ async function showThreadPicker(runtime, normalized, { replyToMessageId } = {}) 
       workspaceRoot,
       threads,
       currentThreadId,
+      archivedThreadCount,
     }),
   });
 }

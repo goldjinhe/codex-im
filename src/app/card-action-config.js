@@ -2,6 +2,9 @@ const PANEL_ACTION_CONFIG = Object.freeze({
   open_threads: Object.freeze({
     feedback: "正在打开线程列表...",
   }),
+  show_archived_threads: Object.freeze({
+    feedback: "正在打开已归档线程...",
+  }),
   new_thread: Object.freeze({
     feedback: "正在创建新线程...",
   }),
@@ -34,6 +37,12 @@ const THREAD_ACTION_CONFIG = Object.freeze({
   messages: Object.freeze({
     feedback: "正在获取最近消息...",
     notCurrentText: "非当前线程，请先切换到该线程。",
+  }),
+  archive: Object.freeze({
+    feedback: "正在归档线程...",
+  }),
+  restore: Object.freeze({
+    feedback: "正在恢复线程...",
   }),
 });
 

@@ -116,13 +116,17 @@ function parseCommand(text) {
   const exactPrefixes = ["/codex"];
 
   const exactCommands = {
+    archive: ["archive"],
+    archived: ["archived"],
     stop: ["stop"],
     where: ["where"],
     inspect_message: ["message"],
     help: ["help"],
     workspace: ["workspace"],
     remove: ["remove"],
+    restore: ["restore"],
     send: ["send"],
+    switch: ["switch"],
     new: ["new"],
     model: ["model"],
     effort: ["effort"],
@@ -138,6 +142,9 @@ function parseCommand(text) {
 
   if (matchesPrefixCommand(normalized, "switch")) {
     return "switch";
+  }
+  if (matchesPrefixCommand(normalized, "restore")) {
+    return "restore";
   }
   if (matchesPrefixCommand(normalized, "remove")) {
     return "remove";

@@ -1,5 +1,5 @@
 const { filterThreadsByWorkspaceRoot } = require("../../shared/workspace-paths");
-const { extractSwitchThreadId } = require("../../shared/command-parsing");
+const { extractRestoreThreadId, extractSwitchThreadId } = require("../../shared/command-parsing");
 const codexMessageUtils = require("../../infra/codex/message-utils");
 
 const THREAD_SOURCE_KINDS = new Set([
@@ -23,7 +23,13 @@ async function resolveWorkspaceThreadState(runtime, {
   autoSelectThread = true,
 }) {
   const threads = await refreshWorkspaceThreads(runtime, bindingKey, workspaceRoot, normalized);
-  const selectedThreadId = runtime.resolveThreadIdForBinding(bindingKey, workspaceRoot);
+  const storedThreadId = runtime.resolveThreadIdForBinding(bindingKey, workspaceRoot);
+  const selectedThreadId = runtime.sessionStore.isThreadArchived(bindingKey, workspaceRoot, storedThreadId)
+    ? ""
+    : storedThreadId;
+  if (storedThreadId && !selectedThreadId) {
+    runtime.sessionStore.clearThreadIdForWorkspace(bindingKey, workspaceRoot);
+  }
   const threadId = selectedThreadId || (autoSelectThread ? (threads[0]?.id || "") : "");
   if (!selectedThreadId && threadId) {
     runtime.sessionStore.setThreadIdForWorkspace(
@@ -188,12 +194,55 @@ async function handleSwitchCommand(runtime, normalized) {
   await switchThreadById(runtime, normalized, threadId, { replyToMessageId: normalized.messageId });
 }
 
+async function handleArchiveCommand(runtime, normalized) {
+  const { threadId } = runtime.getCurrentThreadContext(normalized);
+  if (!threadId) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: normalized.messageId,
+      text: "当前项目还没有可归档的线程。",
+    });
+    return;
+  }
+
+  await archiveThreadById(runtime, normalized, threadId, {
+    replyToMessageId: normalized.messageId,
+  });
+}
+
+async function handleArchivedThreadsCommand(runtime, normalized) {
+  await showArchivedThreadPicker(runtime, normalized, {
+    replyToMessageId: normalized.messageId,
+  });
+}
+
+async function handleRestoreCommand(runtime, normalized) {
+  const threadId = extractRestoreThreadId(normalized.text);
+  if (!threadId) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: normalized.messageId,
+      text: "用法: `/codex restore <threadId>`",
+    });
+    return;
+  }
+
+  await restoreThreadById(runtime, normalized, threadId, {
+    replyToMessageId: normalized.messageId,
+  });
+}
+
 async function refreshWorkspaceThreads(runtime, bindingKey, workspaceRoot, normalized) {
   try {
-    const threads = await listCodexThreadsForWorkspace(runtime, workspaceRoot);
+    const threads = (await listCodexThreadsForWorkspace(runtime, workspaceRoot))
+      .filter((thread) => !runtime.sessionStore.isThreadArchived(bindingKey, workspaceRoot, thread.id));
     const currentThreadId = runtime.sessionStore.getThreadIdForWorkspace(bindingKey, workspaceRoot);
     const shouldKeepCurrentThread = currentThreadId && runtime.resumedThreadIds.has(currentThreadId);
-    if (currentThreadId && !shouldKeepCurrentThread && !threads.some((thread) => thread.id === currentThreadId)) {
+    const isCurrentThreadArchived = runtime.sessionStore.isThreadArchived(bindingKey, workspaceRoot, currentThreadId);
+    if (
+      currentThreadId
+      && (isCurrentThreadArchived || (!shouldKeepCurrentThread && !threads.some((thread) => thread.id === currentThreadId)))
+    ) {
       runtime.sessionStore.clearThreadIdForWorkspace(bindingKey, workspaceRoot);
     }
     return threads;
@@ -303,9 +352,234 @@ async function switchThreadById(runtime, normalized, threadId, { replyToMessageI
   await runtime.showStatusPanel(normalized, { replyToMessageId: replyTarget });
 }
 
+async function showArchivedThreadPicker(runtime, normalized, { replyToMessageId, noticeText = "" } = {}) {
+  const replyTarget = runtime.resolveReplyToMessageId(normalized, replyToMessageId);
+  const { bindingKey, workspaceRoot } = runtime.getBindingContext(normalized);
+  if (!workspaceRoot) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "当前会话还未绑定项目。先发送 `/codex bind /绝对路径`。",
+    });
+    return;
+  }
+
+  const threads = await listArchivedThreadsForWorkspace(runtime, bindingKey, workspaceRoot);
+  if (!threads.length) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: `当前项目：\`${workspaceRoot}\`\n\n还没有已归档线程。`,
+    });
+    return;
+  }
+
+  await runtime.sendInteractiveCard({
+    chatId: normalized.chatId,
+    replyToMessageId: replyTarget,
+    card: runtime.buildArchivedThreadPickerCard({
+      workspaceRoot,
+      threads,
+      noticeText,
+    }),
+  });
+}
+
+async function archiveThreadById(runtime, normalized, threadId, { replyToMessageId } = {}) {
+  const replyTarget = runtime.resolveReplyToMessageId(normalized, replyToMessageId);
+  const { bindingKey, workspaceRoot } = runtime.getBindingContext(normalized);
+  const normalizedThreadId = typeof threadId === "string" ? threadId.trim() : "";
+  if (!workspaceRoot) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "当前会话还未绑定项目。先发送 `/codex bind /绝对路径`。",
+    });
+    return;
+  }
+  if (!normalizedThreadId) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "未读取到线程 ID，请刷新后重试。",
+    });
+    return;
+  }
+  if (runtime.sessionStore.isThreadArchived(bindingKey, workspaceRoot, normalizedThreadId)) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "该线程已经归档，无需重复操作。",
+    });
+    return;
+  }
+  if (runtime.activeTurnIdByThreadId.has(normalizedThreadId)) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "该线程正在运行，先发送 `/codex stop` 后再归档。",
+    });
+    return;
+  }
+  if (runtime.pendingApprovalByThreadId.has(normalizedThreadId)) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "该线程正在等待授权，先处理审批后再归档。",
+    });
+    return;
+  }
+
+  const allThreads = await listCodexThreadsForWorkspace(runtime, workspaceRoot);
+  const targetThread = allThreads.find((item) => item.id === normalizedThreadId) || null;
+  if (!targetThread) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "指定线程当前不可用，请刷新后重试。",
+    });
+    return;
+  }
+
+  runtime.sessionStore.archiveThread(bindingKey, workspaceRoot, normalizedThreadId, targetThread);
+  runtime.resumedThreadIds.delete(normalizedThreadId);
+  runtime.cleanupThreadRuntimeState(normalizedThreadId);
+  runtime.clearPendingReactionForThread(normalizedThreadId).catch((error) => {
+    console.error(`[codex-im] failed to clear pending reaction while archiving thread: ${error.message}`);
+  });
+
+  const currentThreadId = runtime.resolveThreadIdForBinding(bindingKey, workspaceRoot);
+  if (currentThreadId === normalizedThreadId) {
+    const nextVisibleThread = allThreads.find((item) => (
+      item.id !== normalizedThreadId
+      && !runtime.sessionStore.isThreadArchived(bindingKey, workspaceRoot, item.id)
+    )) || null;
+    if (nextVisibleThread) {
+      runtime.sessionStore.setThreadIdForWorkspace(
+        bindingKey,
+        workspaceRoot,
+        nextVisibleThread.id,
+        codexMessageUtils.buildBindingMetadata(normalized)
+      );
+    } else {
+      runtime.sessionStore.clearThreadIdForWorkspace(bindingKey, workspaceRoot);
+    }
+  }
+
+  await runtime.showStatusPanel(normalized, {
+    replyToMessageId: replyTarget,
+    noticeText: `已归档线程：${formatThreadNoticeLabel(targetThread)}`,
+  });
+}
+
+async function restoreThreadById(
+  runtime,
+  normalized,
+  threadId,
+  { replyToMessageId, reopenArchivedList = false } = {}
+) {
+  const replyTarget = runtime.resolveReplyToMessageId(normalized, replyToMessageId);
+  const { bindingKey, workspaceRoot } = runtime.getBindingContext(normalized);
+  const normalizedThreadId = typeof threadId === "string" ? threadId.trim() : "";
+  if (!workspaceRoot) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "当前会话还未绑定项目。先发送 `/codex bind /绝对路径`。",
+    });
+    return;
+  }
+  if (!normalizedThreadId) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "未读取到线程 ID，请刷新后重试。",
+    });
+    return;
+  }
+
+  const archivedThreads = runtime.sessionStore.getArchivedThreadsForWorkspace(bindingKey, workspaceRoot);
+  const targetThread = archivedThreads.find((item) => item.id === normalizedThreadId) || null;
+  if (!targetThread) {
+    await runtime.sendInfoCardMessage({
+      chatId: normalized.chatId,
+      replyToMessageId: replyTarget,
+      text: "该线程未归档，无需恢复。",
+    });
+    return;
+  }
+
+  runtime.sessionStore.restoreThread(bindingKey, workspaceRoot, normalizedThreadId);
+  if (reopenArchivedList) {
+    const remainingArchivedThreads = runtime.sessionStore.getArchivedThreadsForWorkspace(bindingKey, workspaceRoot);
+    if (!remainingArchivedThreads.length) {
+      await runtime.showStatusPanel(normalized, {
+        replyToMessageId: replyTarget,
+        noticeText: `已恢复线程：${formatThreadNoticeLabel(targetThread)}`,
+      });
+      return;
+    }
+    await showArchivedThreadPicker(runtime, normalized, {
+      replyToMessageId: replyTarget,
+      noticeText: `已恢复线程：${formatThreadNoticeLabel(targetThread)}`,
+    });
+    return;
+  }
+
+  await runtime.showStatusPanel(normalized, {
+    replyToMessageId: replyTarget,
+    noticeText: `已恢复线程：${formatThreadNoticeLabel(targetThread)}`,
+  });
+}
+
+async function listArchivedThreadsForWorkspace(runtime, bindingKey, workspaceRoot) {
+  const archivedThreads = runtime.sessionStore.getArchivedThreadsForWorkspace(bindingKey, workspaceRoot);
+  if (!archivedThreads.length) {
+    return [];
+  }
+
+  let liveThreads = [];
+  try {
+    liveThreads = await listCodexThreadsForWorkspace(runtime, workspaceRoot);
+  } catch (error) {
+    console.warn(`[codex-im] archived thread list failed for workspace=${workspaceRoot}: ${error.message}`);
+  }
+  const liveThreadById = new Map(liveThreads.map((thread) => [thread.id, thread]));
+
+  return archivedThreads
+    .map((thread) => {
+      const liveThread = liveThreadById.get(thread.id) || null;
+      return {
+        id: thread.id,
+        cwd: liveThread?.cwd || thread.cwd || workspaceRoot,
+        title: liveThread?.title || thread.title || "",
+        updatedAt: liveThread?.updatedAt || thread.updatedAt || 0,
+        sourceKind: liveThread?.sourceKind || thread.sourceKind || "unknown",
+        archivedAt: thread.archivedAt || "",
+      };
+    })
+    .sort((left, right) => compareArchivedThreads(left, right));
+}
+
 function isSupportedThreadSourceKind(sourceKind) {
   const normalized = typeof sourceKind === "string" && sourceKind.trim() ? sourceKind.trim() : "unknown";
   return THREAD_SOURCE_KINDS.has(normalized);
+}
+
+function compareArchivedThreads(left, right) {
+  const leftArchivedAt = Date.parse(left?.archivedAt || "") || 0;
+  const rightArchivedAt = Date.parse(right?.archivedAt || "") || 0;
+  if (rightArchivedAt !== leftArchivedAt) {
+    return rightArchivedAt - leftArchivedAt;
+  }
+  return Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0);
+}
+
+function formatThreadNoticeLabel(thread) {
+  if (!thread) {
+    return "未命名线程";
+  }
+  return thread.title || thread.id || "未命名线程";
 }
 
 function shouldRecreateThread(error) {
@@ -314,13 +588,19 @@ function shouldRecreateThread(error) {
 }
 
 module.exports = {
+  archiveThreadById,
   createWorkspaceThread,
   describeWorkspaceStatus,
   ensureThreadAndSendMessage,
   ensureThreadResumed,
+  handleArchiveCommand,
+  handleArchivedThreadsCommand,
   handleNewCommand,
+  handleRestoreCommand,
   handleSwitchCommand,
   refreshWorkspaceThreads,
   resolveWorkspaceThreadState,
+  restoreThreadById,
+  showArchivedThreadPicker,
   switchThreadById,
 };

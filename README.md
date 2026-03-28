@@ -21,6 +21,9 @@ Codex 操作都留在 本地，飞书只负责消息交互。
 - `/codex remove /绝对路径` 移除会话绑定项目
 - `/codex send <相对文件路径>` 发送当前绑定项目内的文件
 - `/codex switch <threadId>` 切换线程
+- `/codex archive` 归档当前线程
+- `/codex archived` 查看已归档线程
+- `/codex restore <threadId>` 恢复已归档线程
 - `/codex message` 查看最近几轮消息
 - `/codex new` 新建线程
 - `/codex stop` 停止当前运行
@@ -105,6 +108,9 @@ npm run feishu-bot
 - `/codex remove /绝对路径`
 - `/codex send <相对文件路径>`
 - `/codex switch <threadId>`
+- `/codex archive`
+- `/codex archived`
+- `/codex restore <threadId>`
 - `/codex message`
 - `/codex new`
 - `/codex stop`
@@ -121,6 +127,7 @@ npm run feishu-bot
 - 一个飞书会话可以记住多个项目
 - 每个项目对应一个当前选中的 Codex 线程
 - 历史线程列表以 Codex `thread/list` 为准
+- 已归档线程默认不出现在常用线程列表，可单独查看并恢复
 - 切换项目或线程后，后续普通消息继续发到当前线程
 
 ## 工作方式
