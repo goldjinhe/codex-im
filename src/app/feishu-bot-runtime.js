@@ -42,6 +42,7 @@ const {
 } = require("../infra/feishu/client-adapter");
 const runtimeCommands = require("./command-dispatcher");
 const approvalRuntime = require("../domain/approval/approval-service");
+const gitRuntime = require("../domain/git/git-service");
 const runtimeState = require("../domain/session/binding-context");
 const threadRuntime = require("../domain/thread/thread-service");
 const workspaceRuntime = require("../domain/workspace/workspace-service");
@@ -324,6 +325,7 @@ function attachRuntimeForwarders() {
     handleSendCommand: workspaceRuntime.handleSendCommand,
     handleModelCommand: workspaceRuntime.handleModelCommand,
     handleEffortCommand: workspaceRuntime.handleEffortCommand,
+    handleGitCommand: gitRuntime.handleGitCommand,
     refreshWorkspaceThreads: threadRuntime.refreshWorkspaceThreads,
     describeWorkspaceStatus: threadRuntime.describeWorkspaceStatus,
     restoreThreadById: threadRuntime.restoreThreadById,

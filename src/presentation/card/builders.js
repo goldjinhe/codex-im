@@ -554,6 +554,11 @@ function buildHelpCardText() {
       "查看/设置当前项目的推理强度覆盖。",
     ],
     [
+      "**旁路 Git 操作**",
+      "`/codex git status`\n`/codex git pull`\n`/codex git push`",
+      "`/codex git push` 会自动执行 add、规则生成 commit message、commit、push，且不会进入当前 Codex 线程。",
+    ],
+    [
       "**审批命令**",
       "`/codex approve`\n`/codex approve workspace`\n`/codex reject`",
       "用于处理 Codex 发起的审批请求。",

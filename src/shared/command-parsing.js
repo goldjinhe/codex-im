@@ -26,6 +26,10 @@ function extractEffortValue(text) {
   return extractCommandArgument(text, "/codex effort ");
 }
 
+function extractGitValue(text) {
+  return extractCommandArgument(text, "/codex git ");
+}
+
 function extractCommandArgument(text, prefix) {
   const trimmed = String(text || "").trim();
   const normalizedPrefix = String(prefix || "").toLowerCase();
@@ -38,6 +42,7 @@ function extractCommandArgument(text, prefix) {
 module.exports = {
   extractBindPath,
   extractEffortValue,
+  extractGitValue,
   extractModelValue,
   extractRemoveWorkspacePath,
   extractRestoreThreadId,

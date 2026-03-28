@@ -30,6 +30,7 @@ Codex 操作都留在 本地，飞书只负责消息交互。
 - `/codex stop` 停止当前运行
 - `/codex model` / `/codex model update` / `/codex model <modelId>` 查看可用模型、刷新可用模型以及推理强度、设置模型
 - `/codex effort` / `/codex effort <low|medium|high|xhigh>` 设置推理强度
+- `/codex git status` / `/codex git pull` / `/codex git push` 在当前项目旁路执行 Git 操作，其中 `push` 会自动 add、生成 commit message、commit、push
 - `/codex approve` / `/codex approve workspace` / `/codex reject` 文本审批
 
 ## 安装
@@ -123,6 +124,9 @@ npm run feishu-bot
 - `/codex model`
 - `/codex model update`
 - `/codex effort`
+- `/codex git status`
+- `/codex git pull`
+- `/codex git push`
 - `/codex approve`
 - `/codex approve workspace`
 - `/codex reject`

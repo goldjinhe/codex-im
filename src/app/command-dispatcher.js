@@ -22,6 +22,7 @@ const TEXT_COMMAND_HANDLER_METHODS = {
   new: "handleNewCommand",
   model: "handleModelCommand",
   effort: "handleEffortCommand",
+  git: "handleGitCommand",
   approve: "handleApprovalCommand",
   reject: "handleApprovalCommand",
 };
