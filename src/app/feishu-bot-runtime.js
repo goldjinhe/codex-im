@@ -73,6 +73,7 @@ class FeishuBotRuntime {
     this.replyFlushTimersByRunKey = new Map();
     this.pendingReactionByBindingKey = new Map();
     this.pendingReactionByThreadId = new Map();
+    this.pendingIncomingImageBySourceKey = new Map();
     this.bindingKeyByThreadId = new Map();
     this.workspaceRootByThreadId = new Map();
     this.approvalAllowlistByWorkspaceRoot = new Map();
@@ -144,7 +145,7 @@ class FeishuBotRuntime {
   startLongConnection() {
     const eventDispatcher = new this.lark.EventDispatcher({}).register({
       "im.message.receive_v1": async (data) => {
-        appDispatcher.onFeishuTextEvent(this, data).catch((error) => {
+        appDispatcher.onFeishuMessageEvent(this, data).catch((error) => {
           console.error(`[codex-im] failed to process Feishu message: ${error.message}`);
         });
       },
@@ -327,6 +328,10 @@ attachRuntimeForwarders();
 
 FeishuBotRuntime.prototype.sendFileMessage = function sendFileMessage(args) {
   return this.requireFeishuAdapter().sendFileMessage(args);
+};
+
+FeishuBotRuntime.prototype.downloadMessageResource = function downloadMessageResource(args) {
+  return this.requireFeishuAdapter().downloadMessageResource(args);
 };
 
 function maskSecret(value) {

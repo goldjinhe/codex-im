@@ -81,6 +81,34 @@ class FeishuClientAdapter {
     });
   }
 
+  async downloadMessageResource({ messageId, fileKey, type }) {
+    const getMessageResource = resolveGetMessageResourceMethod(this.client);
+    const response = await getMessageResource.call(
+      this.client.im?.v1?.messageResource || this.client.im?.messageResource || this.client,
+      {
+        path: {
+          message_id: normalizeMessageId(messageId),
+          file_key: normalizeIdentifier(fileKey),
+        },
+        params: {
+          type: normalizeMessageResourceType(type),
+        },
+      }
+    );
+
+    const readableStream = typeof response?.getReadableStream === "function"
+      ? response.getReadableStream()
+      : null;
+    if (!readableStream) {
+      throw new Error("Feishu message resource download did not return a readable stream");
+    }
+
+    return {
+      buffer: await readStreamToBuffer(readableStream),
+      headers: response?.headers || {},
+    };
+  }
+
   async createReaction({ messageId, emojiType }) {
     const createReaction = resolveCreateReactionMethod(this.client);
     return createReaction.call(
@@ -156,6 +184,14 @@ function resolveCreateFileMethod(client) {
   return fn;
 }
 
+function resolveGetMessageResourceMethod(client) {
+  const fn = client?.im?.v1?.messageResource?.get || client?.im?.messageResource?.get;
+  if (typeof fn !== "function") {
+    throw new Error("Unsupported Feishu SDK shape: missing messageResource.get");
+  }
+  return fn;
+}
+
 function normalizeMessageId(messageId) {
   const normalized = typeof messageId === "string" ? messageId.trim() : "";
   if (!normalized) {
@@ -212,6 +248,24 @@ function normalizeIdentifier(value) {
 
 function normalizeFileName(fileName) {
   return typeof fileName === "string" && fileName.trim() ? fileName.trim() : "file";
+}
+
+function normalizeMessageResourceType(type) {
+  return type === "file" ? "file" : "image";
+}
+
+function readStreamToBuffer(readableStream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    readableStream.on("data", (chunk) => {
+      if (!chunk) {
+        return;
+      }
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    readableStream.once("end", () => resolve(Buffer.concat(chunks)));
+    readableStream.once("error", reject);
+  });
 }
 
 module.exports = {

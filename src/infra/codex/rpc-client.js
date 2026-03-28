@@ -142,12 +142,16 @@ class CodexRpcClient {
   async sendUserMessage({
     threadId,
     text,
+    localImagePaths = [],
     model = null,
     effort = null,
     accessMode = null,
     workspaceRoot = "",
   }) {
-    const input = buildTurnInputPayload(text);
+    const input = buildTurnInputPayload({
+      text,
+      localImagePaths,
+    });
     return threadId
       ? this.sendRequest(
         "turn/start",
@@ -346,14 +350,22 @@ function buildListThreadsParams({ cursor, limit, sortKey }) {
   return params;
 }
 
-function buildTurnInputPayload(text) {
+function buildTurnInputPayload({ text, localImagePaths = [] }) {
   const normalizedText = normalizeNonEmptyString(text);
+  const normalizedLocalImagePaths = normalizeStringList(localImagePaths);
   const items = [];
 
   if (normalizedText) {
     items.push({
       type: "text",
       text: normalizedText,
+    });
+  }
+
+  for (const imagePath of normalizedLocalImagePaths) {
+    items.push({
+      type: "localImage",
+      path: imagePath,
     });
   }
 
@@ -410,6 +422,25 @@ function buildExecutionPolicies(accessMode, workspaceRoot) {
     approvalPolicy: "on-request",
     sandboxPolicy,
   };
+}
+
+function normalizeStringList(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const normalizedValues = [];
+  const seen = new Set();
+  for (const value of values) {
+    const normalized = normalizeNonEmptyString(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    normalizedValues.push(normalized);
+  }
+
+  return normalizedValues;
 }
 
 module.exports = { CodexRpcClient };

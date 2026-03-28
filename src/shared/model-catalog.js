@@ -60,6 +60,7 @@ function normalizeModelCatalog(models) {
       supportedReasoningEfforts: normalizeReasoningEfforts(
         model.supportedReasoningEfforts || model.supported_reasoning_efforts
       ),
+      inputModalities: normalizeInputModalities(model.inputModalities || model.input_modalities),
       defaultReasoningEffort: normalizeText(model.defaultReasoningEffort || model.default_reasoning_effort),
       isDefault: !!(model.isDefault || model.is_default),
     });
@@ -89,6 +90,25 @@ function normalizeReasoningEfforts(efforts) {
     seen.add(key);
     result.push(normalized);
   }
+  return result;
+}
+
+function normalizeInputModalities(modalities) {
+  if (!Array.isArray(modalities)) {
+    return [];
+  }
+
+  const result = [];
+  const seen = new Set();
+  for (const modality of modalities) {
+    const normalized = normalizeText(modality).toLowerCase();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
   return result;
 }
 
