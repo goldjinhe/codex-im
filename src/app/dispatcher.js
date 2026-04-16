@@ -14,6 +14,13 @@ async function onFeishuMessageEvent(runtime, event) {
     return;
   }
 
+  if (runtime.markIncomingMessageSeen(normalized)) {
+    console.log(
+      `[codex-im] duplicate Feishu message ignored message=${normalized.messageId || "-"} event=${normalized.eventId || "-"}`
+    );
+    return;
+  }
+
   const mergedNormalized = await maybeMergeFeishuAdjacentImageAndText(runtime, normalized);
   if (!mergedNormalized) {
     return;

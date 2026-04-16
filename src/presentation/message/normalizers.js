@@ -14,6 +14,7 @@ function normalizeFeishuMessageEvent(event, config) {
     chatId: message.chat_id || "",
     threadKey: message.root_id || "",
     senderId: sender?.sender_id?.open_id || sender?.sender_id?.user_id || "",
+    eventId: extractFeishuEventId(event),
     messageId: message.message_id || "",
     messageType: normalizeIdentifier(message.message_type),
     text: parsedMessage.text,
@@ -21,6 +22,15 @@ function normalizeFeishuMessageEvent(event, config) {
     command: parsedMessage.imageKeys.length > 0 ? "" : parseCommand(parsedMessage.text),
     receivedAt: new Date().toISOString(),
   };
+}
+
+function extractFeishuEventId(event) {
+  return normalizeIdentifier(
+    event?.header?.event_id
+    || event?.event_id
+    || event?.schema?.event_id
+    || ""
+  );
 }
 
 function extractCardAction(data) {

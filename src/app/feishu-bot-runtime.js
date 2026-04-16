@@ -52,6 +52,9 @@ const appDispatcher = require("./dispatcher");
 const { extractModelCatalogFromListResponse } = require("../shared/model-catalog");
 const fs = require("fs");
 
+const INCOMING_MESSAGE_DEDUP_TTL_MS = 10 * 60 * 1000;
+const MAX_INCOMING_MESSAGE_DEDUP_ENTRIES = 10000;
+
 class FeishuBotRuntime {
   constructor(config = readConfig()) {
     this.config = config;
@@ -73,9 +76,12 @@ class FeishuBotRuntime {
     this.replyCardByRunKey = new Map();
     this.currentRunKeyByThreadId = new Map();
     this.replyFlushTimersByRunKey = new Map();
+    this.replyFlushInFlightByRunKey = new Map();
+    this.replyFlushRequestedByRunKey = new Set();
     this.pendingReactionByBindingKey = new Map();
     this.pendingReactionByThreadId = new Map();
     this.pendingIncomingImageBySourceKey = new Map();
+    this.recentIncomingMessageKeys = new Map();
     this.bindingKeyByThreadId = new Map();
     this.workspaceRootByThreadId = new Map();
     this.approvalAllowlistByWorkspaceRoot = new Map();
@@ -263,6 +269,35 @@ class FeishuBotRuntime {
       throw error;
     }
   }
+
+  markIncomingMessageSeen(normalized) {
+    const dedupKey = buildIncomingMessageDedupKey(normalized);
+    if (!dedupKey) {
+      return false;
+    }
+
+    const now = Date.now();
+    pruneIncomingMessageDedupMap(this.recentIncomingMessageKeys, now);
+    const seenAt = Number(this.recentIncomingMessageKeys.get(dedupKey) || 0);
+    if (seenAt && (now - seenAt) < INCOMING_MESSAGE_DEDUP_TTL_MS) {
+      return true;
+    }
+
+    if (this.recentIncomingMessageKeys.has(dedupKey)) {
+      this.recentIncomingMessageKeys.delete(dedupKey);
+    }
+    this.recentIncomingMessageKeys.set(dedupKey, now);
+
+    while (this.recentIncomingMessageKeys.size > MAX_INCOMING_MESSAGE_DEDUP_ENTRIES) {
+      const oldestKey = this.recentIncomingMessageKeys.keys().next().value;
+      if (!oldestKey) {
+        break;
+      }
+      this.recentIncomingMessageKeys.delete(oldestKey);
+    }
+
+    return false;
+  }
 }
 
 function attachRuntimeForwarders() {
@@ -394,6 +429,37 @@ function maskSecret(value) {
     return "***";
   }
   return `${value.slice(0, 3)}***${value.slice(-3)}`;
+}
+
+function buildIncomingMessageDedupKey(normalized) {
+  if (!normalized || typeof normalized !== "object") {
+    return "";
+  }
+
+  const provider = typeof normalized.provider === "string" ? normalized.provider.trim() : "";
+  const messageId = typeof normalized.messageId === "string" ? normalized.messageId.trim() : "";
+  if (provider && messageId) {
+    return `${provider}:message:${messageId}`;
+  }
+
+  const eventId = typeof normalized.eventId === "string" ? normalized.eventId.trim() : "";
+  if (provider && eventId) {
+    return `${provider}:event:${eventId}`;
+  }
+
+  return "";
+}
+
+function pruneIncomingMessageDedupMap(map, now = Date.now()) {
+  if (!map || map.size <= 0) {
+    return;
+  }
+
+  for (const [key, seenAt] of map.entries()) {
+    if (!Number.isFinite(seenAt) || (now - seenAt) >= INCOMING_MESSAGE_DEDUP_TTL_MS) {
+      map.delete(key);
+    }
+  }
 }
 
 module.exports = { FeishuBotRuntime };

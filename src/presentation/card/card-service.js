@@ -214,7 +214,7 @@ async function scheduleReplyCardFlush(runtime, runKey, { immediate = false } = {
 
   if (immediate) {
     clearReplyFlushTimer(runtime, runKey);
-    await flushReplyCard(runtime, runKey);
+    await queueReplyCardFlush(runtime, runKey);
     return;
   }
 
@@ -224,11 +224,39 @@ async function scheduleReplyCardFlush(runtime, runKey, { immediate = false } = {
 
   const timer = setTimeout(() => {
     runtime.replyFlushTimersByRunKey.delete(runKey);
-    flushReplyCard(runtime, runKey).catch((error) => {
+    queueReplyCardFlush(runtime, runKey).catch((error) => {
       console.error(`[codex-im] failed to flush reply card: ${error.message}`);
     });
   }, 300);
   runtime.replyFlushTimersByRunKey.set(runKey, timer);
+}
+
+async function queueReplyCardFlush(runtime, runKey) {
+  if (!runKey) {
+    return;
+  }
+
+  runtime.replyFlushRequestedByRunKey.add(runKey);
+  const inFlight = runtime.replyFlushInFlightByRunKey.get(runKey);
+  if (inFlight) {
+    await inFlight;
+    return;
+  }
+
+  const promise = (async () => {
+    try {
+      while (runtime.replyFlushRequestedByRunKey.has(runKey)) {
+        runtime.replyFlushRequestedByRunKey.delete(runKey);
+        await flushReplyCard(runtime, runKey);
+      }
+    } finally {
+      runtime.replyFlushRequestedByRunKey.delete(runKey);
+      runtime.replyFlushInFlightByRunKey.delete(runKey);
+    }
+  })();
+
+  runtime.replyFlushInFlightByRunKey.set(runKey, promise);
+  await promise;
 }
 
 function clearReplyFlushTimer(runtime, runKey) {
@@ -343,6 +371,8 @@ async function deleteReaction(runtime, { messageId, reactionId }) {
 function disposeReplyRunState(runtime, runKey, threadId) {
   if (runKey) {
     clearReplyFlushTimer(runtime, runKey);
+    runtime.replyFlushRequestedByRunKey.delete(runKey);
+    runtime.replyFlushInFlightByRunKey.delete(runKey);
     runtime.replyCardByRunKey.delete(runKey);
   }
   if (threadId && runtime.currentRunKeyByThreadId.get(threadId) === runKey) {
