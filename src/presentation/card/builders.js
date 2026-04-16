@@ -1,6 +1,6 @@
 ﻿
 const { sanitizeAssistantMarkdown } = require("../../shared/assistant-markdown");
-const { normalizeText, resolveEffectiveModelForEffort } = require("../../shared/model-catalog");
+const { findModelByQuery, normalizeText, resolveEffectiveModelForEffort } = require("../../shared/model-catalog");
 
 // UI card builders extracted from feishu-bot runtime
 function buildApprovalCard(approval) {
@@ -1113,15 +1113,36 @@ function formatCodexParam(value) {
   return normalized || "默认";
 }
 
+function buildCatalogCustomModelHint(currentModel, availableModelsResult) {
+  const normalizedModel = normalizeText(currentModel);
+  if (!normalizedModel) {
+    return "";
+  }
+  const matched = findModelByQuery(availableModelsResult?.models || [], normalizedModel);
+  if (matched) {
+    return "";
+  }
+  return `提示：当前模型 \`${normalizedModel}\` 为自定义模型，未出现在同步列表中；仍会按该模型标识发起请求。`;
+}
+
 function buildModelInfoText(workspaceRoot, current, availableModelsResult) {
   const model = current?.model || "默认";
   const effort = current?.effort || "默认";
-  const modelLines = buildAvailableModelLines(availableModelsResult, { limit: 10 });
+  const customModelHint = buildCatalogCustomModelHint(current?.model, availableModelsResult);
+  const modelLines = buildAvailableModelLines(availableModelsResult, {
+    limit: 10,
+    extraModels: [current?.model],
+  });
   const canLoadModels = !availableModelsResult?.error;
-  return [
+  const lines = [
     `当前项目：\`${workspaceRoot}\``,
     `模型：${model}`,
     `推理强度：${effort}`,
+  ];
+  if (customModelHint) {
+    lines.push(customModelHint);
+  }
+  lines.push(
     "",
     ...modelLines,
     "",
@@ -1129,8 +1150,9 @@ function buildModelInfoText(workspaceRoot, current, availableModelsResult) {
     "`/codex model`",
     "`/codex model update`",
     "`/codex model <modelId>`",
-    canLoadModels ? "" : "提示：当前无法拉取模型列表，设置模型会被拒绝。",
-  ].join("\n");
+    canLoadModels ? "" : "提示：当前无法拉取模型列表；仍可直接执行 `/codex model <modelId>` 设置自定义模型。",
+  );
+  return lines.join("\n");
 }
 
 function buildEffortInfoText(workspaceRoot, current, availableModelsResult) {
@@ -1140,11 +1162,17 @@ function buildEffortInfoText(workspaceRoot, current, availableModelsResult) {
     availableModelsResult?.models || [],
     current?.model || ""
   );
+  const customModelHint = buildCatalogCustomModelHint(current?.model, availableModelsResult);
   const effortLines = buildAvailableEffortLines(effectiveModel, availableModelsResult);
-  return [
+  const lines = [
     `当前项目：\`${workspaceRoot}\``,
     `模型：${model}`,
     `推理强度：${effort}`,
+  ];
+  if (customModelHint) {
+    lines.push(customModelHint);
+  }
+  lines.push(
     "",
     ...effortLines,
     "",
@@ -1152,10 +1180,11 @@ function buildEffortInfoText(workspaceRoot, current, availableModelsResult) {
     "`/codex effort`",
     "`/codex model update`",
     "`/codex effort <low|medium|high|xhigh>`",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
-function buildModelListText(workspaceRoot, availableModelsResult, { refreshed = false } = {}) {
+function buildModelListText(workspaceRoot, availableModelsResult, { refreshed = false, extraModels = [] } = {}) {
   const cacheMeta = buildCacheMetaLine(availableModelsResult, { refreshed });
   const lines = [
     `当前项目：\`${workspaceRoot}\``,
@@ -1163,7 +1192,7 @@ function buildModelListText(workspaceRoot, availableModelsResult, { refreshed = 
     "",
     "**可用模型**",
   ];
-  lines.push(...buildAvailableModelLines(availableModelsResult, { limit: 60 }));
+  lines.push(...buildAvailableModelLines(availableModelsResult, { limit: 60, extraModels }));
   lines.push("", "用法：", "`/codex model update`", "`/codex model <modelId>`");
   return lines.join("\n");
 }
@@ -1191,10 +1220,16 @@ function buildEffortListText(workspaceRoot, current, availableModelsResult, { re
     current?.model || ""
   );
   const cacheMeta = buildCacheMetaLine(availableModelsResult, { refreshed });
+  const customModelHint = buildCatalogCustomModelHint(current?.model, availableModelsResult);
   const lines = [
     `当前项目：\`${workspaceRoot}\``,
     cacheMeta,
-    `当前模型：\`${effectiveModel?.model || current?.model || "默认"}\``,
+    `当前模型：\`${current?.model || effectiveModel?.model || "默认"}\``,
+  ];
+  if (customModelHint) {
+    lines.push(customModelHint);
+  }
+  lines.push(
     "",
     "**可用推理强度**",
     ...buildAvailableEffortLines(effectiveModel, availableModelsResult),
@@ -1203,7 +1238,7 @@ function buildEffortListText(workspaceRoot, current, availableModelsResult, { re
     "`/codex effort`",
     "`/codex model update`",
     "`/codex effort <low|medium|high|xhigh>`",
-  ];
+  );
   return lines.join("\n");
 }
 
@@ -1222,16 +1257,42 @@ function buildEffortValidationErrorText(workspaceRoot, modelEntry, rawEffort) {
   ].join("\n");
 }
 
-function buildAvailableModelLines(availableModelsResult, { limit = 10 } = {}) {
+function buildAvailableModelLines(availableModelsResult, { limit = 10, extraModels = [] } = {}) {
   if (availableModelsResult?.error) {
     return [`获取可用模型失败：${availableModelsResult.error}`];
   }
-  const models = Array.isArray(availableModelsResult?.models) ? availableModelsResult.models : [];
+  const catalogModels = Array.isArray(availableModelsResult?.models) ? availableModelsResult.models : [];
+  const models = [];
+  const seen = new Set();
+  const addModel = (value) => {
+    const normalized = normalizeText(typeof value === "string" ? value : value?.model);
+    if (!normalized) {
+      return;
+    }
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    models.push(typeof value === "string" ? { model: normalized } : { ...value, model: normalized });
+  };
+  const extras = Array.isArray(extraModels) ? extraModels : [extraModels];
+  for (const value of extras) {
+    addModel(value);
+  }
+  for (const item of catalogModels) {
+    addModel(item);
+  }
   if (!models.length) {
     return ["暂无可用模型。"];
   }
 
-  const lines = [`共 ${models.length} 个模型：`];
+  const customCount = Math.max(0, models.length - catalogModels.length);
+  const lines = [
+    customCount > 0
+      ? `共 ${models.length} 个模型（含 ${customCount} 个自定义模型）：`
+      : `共 ${models.length} 个模型：`,
+  ];
   const display = models.slice(0, Math.max(1, limit));
   for (const item of display) {
     lines.push(`- \`${item.model}\``);

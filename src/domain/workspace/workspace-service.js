@@ -137,7 +137,10 @@ async function showStatusPanel(runtime, normalized, { replyToMessageId, noticeTe
   const codexParams = runtime.getCodexParamsForWorkspace(bindingKey, workspaceRoot);
   const availableCatalog = runtime.sessionStore.getAvailableModelCatalog();
   const availableModels = Array.isArray(availableCatalog?.models) ? availableCatalog.models : [];
-  const modelOptions = buildModelSelectOptions(availableModels);
+  const modelOptions = buildModelSelectOptions(availableModels, [
+    codexParams?.model,
+    runtime.config.defaultCodexModel,
+  ]);
   const effortOptions = buildEffortSelectOptions(availableModels, codexParams?.model || "");
   await runtime.sendInteractiveCard({
     chatId: normalized.chatId,
@@ -333,24 +336,23 @@ async function handleModelCommand(runtime, normalized) {
     const availableModelsResult = await loadAvailableModels(runtime, {
       forceRefresh: true,
     });
+    const current = runtime.getCodexParamsForWorkspace(bindingKey, workspaceRoot);
     await runtime.sendInfoCardMessage({
       chatId: normalized.chatId,
       replyToMessageId: normalized.messageId,
       text: runtime.buildModelListText(workspaceRoot, availableModelsResult, {
         refreshed: true,
+        extraModels: [current?.model, runtime.config.defaultCodexModel],
       }),
     });
     return;
   }
 
-  const availableModelsResult = await loadAvailableModelsForSetting(runtime, normalized, {
-    settingType: "model",
+  const availableModelsResult = await loadAvailableModels(runtime, {
+    forceRefresh: false,
   });
-  if (!availableModelsResult) {
-    return;
-  }
-
-  const resolvedModel = resolveRequestedModel(availableModelsResult.models, rawModel);
+  const catalogModel = resolveRequestedModel(availableModelsResult.models, rawModel);
+  const resolvedModel = normalizeText(catalogModel || rawModel);
   if (!resolvedModel) {
     await runtime.sendInfoCardMessage({
       chatId: normalized.chatId,
@@ -367,7 +369,9 @@ async function handleModelCommand(runtime, normalized) {
   });
   await runtime.showStatusPanel(normalized, {
     replyToMessageId: normalized.messageId,
-    noticeText: `已设置模型：${resolvedModel}`,
+    noticeText: catalogModel
+      ? `已设置模型：${resolvedModel}`
+      : `已设置自定义模型：${resolvedModel}`,
   });
 }
 
@@ -682,7 +686,7 @@ function validateDefaultCodexParamsConfig(runtime, modelsInput) {
   }
 
   if (rawModel) {
-    result.model = resolveRequestedModel(models, rawModel);
+    result.model = resolveRequestedModel(models, rawModel) || rawModel;
   }
 
   if (rawEffort) {
@@ -807,18 +811,33 @@ function resolveRequestedEffort(modelEntry, rawEffort) {
   return "";
 }
 
-function buildModelSelectOptions(models) {
-  if (!Array.isArray(models) || !models.length) {
-    return [];
+function buildModelSelectOptions(models, extraModels = []) {
+  const options = [];
+  const seen = new Set();
+  const addOption = (value) => {
+    const normalized = normalizeText(typeof value === "string" ? value : value?.model);
+    if (!normalized) {
+      return;
+    }
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    options.push({
+      label: normalized,
+      value: normalized,
+    });
+  };
+
+  const extras = Array.isArray(extraModels) ? extraModels : [extraModels];
+  for (const value of extras) {
+    addOption(value);
   }
-  return models
-    .map((item) => normalizeText(item?.model))
-    .filter(Boolean)
-    .slice(0, 100)
-    .map((model) => ({
-      label: model,
-      value: model,
-    }));
+  for (const item of Array.isArray(models) ? models : []) {
+    addOption(item?.model);
+  }
+  return options.slice(0, 100);
 }
 
 function buildEffortSelectOptions(models, currentModel) {
