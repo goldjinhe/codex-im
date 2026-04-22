@@ -55,15 +55,12 @@ async function ensureThreadAndSendMessage(runtime, { bindingKey, workspaceRoot, 
       workspaceRoot,
       normalized,
     });
-    console.log(`[codex-im] turn/start first message thread=${createdThreadId}`);
-    await runtime.codex.sendUserMessage({
+    await sendWorkspaceUserMessage(runtime, {
       threadId: createdThreadId,
-      text: normalized.text,
-      localImagePaths: normalized.localImagePaths,
-      model: codexParams.model || null,
-      effort: codexParams.effort || null,
-      accessMode: runtime.config.defaultCodexAccessMode,
       workspaceRoot,
+      normalized,
+      codexParams,
+      phase: "first",
     });
     runtime.setThreadBindingKey(createdThreadId, bindingKey);
     runtime.setThreadWorkspaceRoot(createdThreadId, workspaceRoot);
@@ -72,14 +69,12 @@ async function ensureThreadAndSendMessage(runtime, { bindingKey, workspaceRoot, 
 
   try {
     await ensureThreadResumed(runtime, threadId);
-    await runtime.codex.sendUserMessage({
+    await sendWorkspaceUserMessage(runtime, {
       threadId,
-      text: normalized.text,
-      localImagePaths: normalized.localImagePaths,
-      model: codexParams.model || null,
-      effort: codexParams.effort || null,
-      accessMode: runtime.config.defaultCodexAccessMode,
       workspaceRoot,
+      normalized,
+      codexParams,
+      phase: "resume",
     });
     console.log(`[codex-im] turn/start ok workspace=${workspaceRoot} thread=${threadId}`);
     runtime.setThreadBindingKey(threadId, bindingKey);
@@ -98,20 +93,44 @@ async function ensureThreadAndSendMessage(runtime, { bindingKey, workspaceRoot, 
       workspaceRoot,
       normalized,
     });
-    console.log(`[codex-im] turn/start retry thread=${recreatedThreadId}`);
-    await runtime.codex.sendUserMessage({
+    await sendWorkspaceUserMessage(runtime, {
       threadId: recreatedThreadId,
-      text: normalized.text,
-      localImagePaths: normalized.localImagePaths,
-      model: codexParams.model || null,
-      effort: codexParams.effort || null,
-      accessMode: runtime.config.defaultCodexAccessMode,
       workspaceRoot,
+      normalized,
+      codexParams,
+      phase: "retry",
     });
     runtime.setThreadBindingKey(recreatedThreadId, bindingKey);
     runtime.setThreadWorkspaceRoot(recreatedThreadId, workspaceRoot);
     return recreatedThreadId;
   }
+}
+
+async function sendWorkspaceUserMessage(runtime, {
+  threadId,
+  workspaceRoot,
+  normalized,
+  codexParams,
+  phase,
+}) {
+  const model = codexParams?.model || null;
+  const effort = codexParams?.effort || null;
+  const accessMode = runtime.config.defaultCodexAccessMode;
+  const imageCount = Array.isArray(normalized?.localImagePaths) ? normalized.localImagePaths.length : 0;
+  console.log(
+    `[codex-im] turn/start request phase=${formatLogValue(phase)} workspace=${formatLogValue(workspaceRoot)} `
+    + `thread=${formatLogValue(threadId)} model=${formatLogValue(model)} effort=${formatLogValue(effort)} `
+    + `accessMode=${formatLogValue(accessMode)} imageCount=${imageCount}`
+  );
+  return runtime.codex.sendUserMessage({
+    threadId,
+    text: normalized.text,
+    localImagePaths: normalized.localImagePaths,
+    model,
+    effort,
+    accessMode,
+    workspaceRoot,
+  });
 }
 
 async function createWorkspaceThread(runtime, { bindingKey, workspaceRoot, normalized }) {
@@ -583,6 +602,11 @@ function formatThreadNoticeLabel(thread) {
     return "未命名线程";
   }
   return thread.title || thread.id || "未命名线程";
+}
+
+function formatLogValue(value) {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  return normalized || "default";
 }
 
 function shouldRecreateThread(error) {
