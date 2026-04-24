@@ -215,7 +215,10 @@ class FeishuBotRuntime {
 
   async refreshAvailableModelCatalogAtStartup() {
     const response = await this.codex.listModels();
-    const models = extractModelCatalogFromListResponse(response);
+    const models = mergeExtraCodexModels(
+      extractModelCatalogFromListResponse(response),
+      this.config.extraCodexModels
+    );
     if (!models.length) {
       throw new Error("model/list returned no models at startup");
     }
@@ -420,6 +423,31 @@ FeishuBotRuntime.prototype.sendFileMessage = function sendFileMessage(args) {
 FeishuBotRuntime.prototype.downloadMessageResource = function downloadMessageResource(args) {
   return this.requireFeishuAdapter().downloadMessageResource(args);
 };
+
+function mergeExtraCodexModels(models, extraModels) {
+  const merged = Array.isArray(models) ? [...models] : [];
+  const seen = new Set(
+    merged.map((model) => String(model?.model || model?.id || "").toLowerCase()).filter(Boolean)
+  );
+  for (const extraModel of Array.isArray(extraModels) ? extraModels : []) {
+    const model = String(extraModel || "").trim();
+    const key = model.toLowerCase();
+    if (!model || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    merged.push({
+      id: model,
+      model,
+      displayName: model,
+      supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+      inputModalities: ["text", "image"],
+      defaultReasoningEffort: "medium",
+      isDefault: false,
+    });
+  }
+  return merged;
+}
 
 function maskSecret(value) {
   if (!value) {

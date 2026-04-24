@@ -83,6 +83,7 @@ codex-im feishu-bot
 - `FEISHU_APP_ID`
 - `FEISHU_APP_SECRET`
 - `CODEX_IM_DEFAULT_CODEX_MODEL` 新绑定项目时默认写入的模型（启动时会基于 Codex 可用模型列表校验，不合法则启动失败）
+- `CODEX_IM_EXTRA_CODEX_MODELS` 额外允许的自定义 Codex 模型，逗号分隔，会并入飞书模型列表
 - `CODEX_IM_DEFAULT_CODEX_EFFORT` 新绑定项目时默认写入的推理强度（启动时会基于对应模型可用推理强度校验，不合法则启动失败）
 - `CODEX_IM_DEFAULT_CODEX_ACCESS_MODE` 默认访问模式（必填：`default` / `full-access`）
 

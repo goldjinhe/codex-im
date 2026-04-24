@@ -14,6 +14,7 @@ function readConfig() {
     codexEndpoint: process.env.CODEX_IM_CODEX_ENDPOINT || "",
     codexCommand: process.env.CODEX_IM_CODEX_COMMAND || "",
     defaultCodexModel: readTextEnv("CODEX_IM_DEFAULT_CODEX_MODEL"),
+    extraCodexModels: readListEnv("CODEX_IM_EXTRA_CODEX_MODELS"),
     defaultCodexEffort: readTextEnv("CODEX_IM_DEFAULT_CODEX_EFFORT"),
     defaultCodexAccessMode: readAccessModeEnv("CODEX_IM_DEFAULT_CODEX_ACCESS_MODE"),
     feishu: {
